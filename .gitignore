@@ -1,0 +1,10 @@
+fishing_bot.db
+*.pyc
+__pycache__/
+.env
+*.log
+
+# Don't commit tokens or sensitive data
+.env.local
+.env.production
+start_bot.sh

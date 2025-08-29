@@ -1,0 +1,26 @@
+# Exclude VCS and editor files
+.git
+.gitignore
+.vscode
+.idea
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local data files
+fishing_bot.db
+
+# Tests and docs (not needed in container)
+tests/
+docs/
+
+# OS files
+.DS_Store

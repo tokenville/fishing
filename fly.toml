@@ -1,0 +1,15 @@
+# fly.toml app configuration file for Fly.io
+app = "fsh-tac"
+primary_region = "arn"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  PYTHONDONTWRITEBYTECODE = "1"
+
+# No public networking; this is a background worker (Telegram bot)
+# Dockerfile CMD runs the bot, but we also specify a process for clarity
+[processes]
+  worker = "python bot.py"
