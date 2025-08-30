@@ -8,7 +8,7 @@ import time
 import asyncio
 import logging
 from telegram import Bot
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, Defaults
 from telegram.error import Conflict
 
 from src.database.db_manager import init_database
@@ -88,7 +88,9 @@ def cleanup_bot_instance_sync():
 
 def create_application():
     """Create and configure the bot application"""
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Set HTML as default parse mode
+    defaults = Defaults(parse_mode='HTML')
+    application = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
     
     # Add command handlers
     application.add_handler(CommandHandler("cast", cast))

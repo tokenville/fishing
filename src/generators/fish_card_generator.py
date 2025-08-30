@@ -23,77 +23,77 @@ class SimpleFishGenerator:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
 
-    async def generate_fish_card(self, fish_name: str, pnl: float, time_fishing: str) -> bytes:
-        """Generate simple fish card with AI image"""
+    async def generate_fish_card(self, fish_data: tuple, pnl: float, time_fishing: str) -> bytes:
+        """Generate simple fish card with AI image using fish database data"""
         
-        # Determine rarity for caching
-        rarity = self.determine_rarity(pnl)
+        # Handle both old and new fish data formats (with/without ai_prompt)
+        if len(fish_data) == 12:  # Old format without ai_prompt
+            fish_id, fish_name, emoji, description, min_pnl, max_pnl, min_user_level, required_ponds, required_rods, rarity, story_template, created_at = fish_data
+            ai_prompt = None
+        elif len(fish_data) == 13:  # New format with ai_prompt at the end
+            fish_id, fish_name, emoji, description, min_pnl, max_pnl, min_user_level, required_ponds, required_rods, rarity, story_template, created_at, ai_prompt = fish_data
+        else:
+            # Unexpected format, use safe defaults
+            fish_id = fish_data[0]
+            fish_name = fish_data[1] if len(fish_data) > 1 else "Unknown Fish"
+            emoji = fish_data[2] if len(fish_data) > 2 else "🐟"
+            description = fish_data[3] if len(fish_data) > 3 else ""
+            rarity = fish_data[9] if len(fish_data) > 9 else "common"
+            ai_prompt = fish_data[12] if len(fish_data) > 12 else None
         
-        # Check cache first
-        cache_key = self.get_cache_key(fish_name, rarity)
-        cached_path = self.cache_dir / f"{cache_key}.png"
+        # Check database cache first
+        from src.database.db_manager import get_fish_image_cache, save_fish_image_cache, get_fish_ai_prompt
         
-        if cached_path.exists():
-            logger.info(f"Using cached image for {fish_name}")
-            with open(cached_path, 'rb') as f:
+        cached_image_path = get_fish_image_cache(fish_id, rarity)
+        
+        if cached_image_path and Path(cached_image_path).exists():
+            logger.info(f"Using database cached image for {fish_name}")
+            with open(cached_image_path, 'rb') as f:
                 cached_image = f.read()
         else:
             logger.info(f"Generating new image for {fish_name} ({rarity})")
-            # Generate new image
-            prompt = self.create_fish_prompt(fish_name, rarity)
+            
+            # Static style description for consistent quality
+            style_context = (
+                "Absurd and unexpected artwork, intentionally crude digital drawing, "
+                "MS Paint style, flat colors, rough outlines, naive composition, "
+                "awkward proportions, exaggerated features, comedic surrealism, "
+                "funny and playful, intentionally low-quality, "
+                "square format (1:1 aspect ratio), centered subject"
+            )
+
+            
+            # Use AI prompt from database if available, otherwise generate from data
+            if ai_prompt:
+                prompt = f"{ai_prompt}. {style_context}"
+            else:
+                # Fallback to get AI prompt from database
+                db_prompt = get_fish_ai_prompt(fish_id)
+                if db_prompt:
+                    prompt = f"{db_prompt}. {style_context}"
+                else:
+                    # Fallback to simple description-based prompt
+                    base_prompt = description if description else f"A fish representing {fish_name}"
+                    prompt = f"{base_prompt}. {style_context}"
+            
             cached_image = await self.generate_ai_image(prompt)
             
-            # Cache the generated image
-            with open(cached_path, 'wb') as f:
+            # Save to database cache
+            cache_key = self.get_cache_key(fish_name, rarity)
+            image_path = self.cache_dir / f"{cache_key}.png"
+            
+            with open(image_path, 'wb') as f:
                 f.write(cached_image)
+            
+            save_fish_image_cache(fish_id, rarity, str(image_path), cache_key)
         
         # Create final card with text overlay
-        return self.create_simple_card(cached_image, fish_name, pnl, time_fishing, rarity)
-
-    def determine_rarity(self, pnl: float) -> str:
-        """Determine rarity based on P&L"""
-        if pnl < -10:
-            return "trash"
-        elif pnl < 0:
-            return "trash"
-        elif pnl < 20:
-            return "common"
-        elif pnl < 50:
-            return "rare"
-        elif pnl < 100:
-            return "epic"
-        else:
-            return "legendary"
+        return self.create_simple_card(cached_image, f"{emoji} {fish_name}", pnl, time_fishing, rarity)
 
     def get_cache_key(self, fish_name: str, rarity: str) -> str:
         """Generate cache key"""
         key_string = f"{fish_name}_{rarity}"
         return hashlib.md5(key_string.encode()).hexdigest()
-
-    def create_fish_prompt(self, fish_name: str, rarity: str) -> str:
-        """Create AI prompt for fish"""
-        
-        base_prompts = {
-            "🦐 Soggy Boot": "An old waterlogged leather boot on the ocean floor",
-            "🐡 Pufferfish of Regret": "A spiky inflated pufferfish with sad expression", 
-            "🐟 Lucky Minnow": "A small shiny silver minnow fish swimming gracefully",
-            "🐠 Diamond Fin Bass": "A beautiful bass fish with sparkling diamond-like fins",
-            "🦈 Profit Shark": "A powerful sleek shark swimming confidently",
-            "🐋 Legendary Whale": "A massive majestic whale with golden markings"
-        }
-        
-        rarity_modifiers = {
-            "trash": "murky water, disappointing, low quality",
-            "common": "clear water, simple, clean", 
-            "rare": "beautiful lighting, shimmering water",
-            "epic": "dramatic lighting, treasure elements, dynamic",
-            "legendary": "epic golden lighting, divine aura, treasure and glory"
-        }
-        
-        base_prompt = base_prompts.get(fish_name, f"A fish representing {fish_name}")
-        modifier = rarity_modifiers.get(rarity, "underwater scene")
-        
-        return f"{base_prompt}, {modifier}. Square format, centered composition, high quality digital art, underwater scene."
 
     async def generate_ai_image(self, prompt: str) -> bytes:
         """Generate AI image using OpenRouter"""
@@ -248,9 +248,125 @@ class SimpleFishGenerator:
         pnl_text = f"+${pnl:.1f}" if pnl >= 0 else f"${pnl:.1f}"
         draw.text((8, overlay_y + 25), f"{pnl_text} • {time_fishing}", fill=pnl_color, font=small_font)
 
-# Global instance
-simple_generator = SimpleFishGenerator()
+class FishPromptManager:
+    """Manager for fish AI prompts with convenient methods"""
+    
+    def __init__(self):
+        pass
+    
+    def list_all_prompts(self):
+        """List all fish with their current AI prompts"""
+        from src.database.db_manager import get_all_fish_prompts
+        return get_all_fish_prompts()
+    
+    def get_prompt(self, fish_name: str):
+        """Get AI prompt for fish by name"""
+        from src.database.db_manager import get_fish_by_name, get_fish_ai_prompt
+        fish = get_fish_by_name(fish_name)
+        if fish:
+            return get_fish_ai_prompt(fish[0])  # fish[0] is ID
+        return None
+    
+    def update_prompt(self, fish_name: str, new_prompt: str) -> bool:
+        """Update AI prompt for fish by name"""
+        from src.database.db_manager import get_fish_by_name, update_fish_ai_prompt
+        fish = get_fish_by_name(fish_name)
+        if fish:
+            return update_fish_ai_prompt(fish[0], new_prompt)  # fish[0] is ID
+        return False
+    
+    def update_prompt_by_id(self, fish_id: int, new_prompt: str) -> bool:
+        """Update AI prompt for fish by ID"""
+        from src.database.db_manager import update_fish_ai_prompt
+        return update_fish_ai_prompt(fish_id, new_prompt)
+    
+    def bulk_update_prompts(self, prompts_dict: dict) -> int:
+        """Update multiple prompts at once
+        
+        Args:
+            prompts_dict: Dictionary {fish_name: new_prompt}
+        
+        Returns:
+            Number of prompts updated
+        """
+        from src.database.db_manager import get_fish_by_name, update_fish_prompts_bulk
+        
+        prompts_data = []
+        for fish_name, prompt in prompts_dict.items():
+            fish = get_fish_by_name(fish_name)
+            if fish:
+                prompts_data.append((fish[0], prompt))  # (fish_id, prompt)
+        
+        if prompts_data:
+            return update_fish_prompts_bulk(prompts_data)
+        return 0
+    
+    def generate_default_prompt(self, fish_name: str) -> str:
+        """Generate a default AI prompt for a fish"""
+        from src.database.db_manager import get_fish_by_name
+        
+        fish = get_fish_by_name(fish_name)
+        if fish:
+            _, name, _, description, _, _, _, _, _, rarity_db, _ = fish[:11]
+            
+            base_prompt = description if description else f"A fish representing {name}"
+            return f"{base_prompt}. Square format, centered composition, high quality digital art, underwater scene."
+        
+        return f"A fish representing {fish_name}, underwater scene, high quality digital art."
+    
+    def clear_image_cache(self, fish_name: str = None):
+        """Clear cached images to force regeneration with new prompts"""
+        if fish_name:
+            # Clear cache for specific fish
+            from src.database.db_manager import get_fish_by_name
+            fish = get_fish_by_name(fish_name)
+            if fish:
+                fish_id = fish[0]
+                # Remove cached images from filesystem and database
+                import sqlite3
+                from pathlib import Path
+                
+                conn = sqlite3.connect('fishing_bot.db')
+                cursor = conn.cursor()
+                
+                cursor.execute('SELECT image_path FROM fish_images WHERE fish_id = ?', (fish_id,))
+                cached_paths = cursor.fetchall()
+                
+                for path_tuple in cached_paths:
+                    try:
+                        Path(path_tuple[0]).unlink(missing_ok=True)
+                    except:
+                        pass
+                
+                cursor.execute('DELETE FROM fish_images WHERE fish_id = ?', (fish_id,))
+                conn.commit()
+                conn.close()
+        else:
+            # Clear all cached images
+            import sqlite3
+            from pathlib import Path
+            
+            conn = sqlite3.connect('fishing_bot.db')
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT image_path FROM fish_images')
+            cached_paths = cursor.fetchall()
+            
+            for path_tuple in cached_paths:
+                try:
+                    Path(path_tuple[0]).unlink(missing_ok=True)
+                except:
+                    pass
+            
+            cursor.execute('DELETE FROM fish_images')
+            conn.commit()
+            conn.close()
 
-async def generate_fish_card_image(fish_name: str, pnl: float, time_fishing: str) -> bytes:
-    """Generate simple fish card image"""
-    return await simple_generator.generate_fish_card(fish_name, pnl, time_fishing)
+# Global instances
+simple_generator = SimpleFishGenerator()
+prompt_manager = FishPromptManager()
+
+async def generate_fish_card_from_db(fish_data: tuple, pnl: float, time_fishing: str) -> bytes:
+    """Generate fish card image from database fish data"""
+    return await simple_generator.generate_fish_card(fish_data, pnl, time_fishing)
+

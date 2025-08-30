@@ -3,190 +3,305 @@ Message templates and text generators for the fishing bot.
 Contains all static messages, dynamic text generation functions, and story templates.
 """
 
-def get_simple_cast_messages():
-    """Simple casting messages with emojis"""
+def escape_markdown(text):
+    """Simply return text without escaping - we'll use plain text mode"""
+    return text if text else ""
+
+def get_cast_header(username, rod_name, pond_name, pond_pair, entry_price, leverage):
+    """Fixed casting header with key information"""
+    safe_username = username if username else "Рыбак"
+    
+    return (
+        f"🎣 <b>{safe_username}</b> забрасывает удочку:\n\n"
+        f"Удочка: <b>{rod_name}</b>\n"
+        f"Водоем: <b>{pond_name}</b> ({pond_pair})\n"
+        f"Стартовая позиция: <b>${entry_price:.2f}</b>\n"
+        f"Плечо: <b>{leverage}x</b>"
+    )
+
+def get_cast_animated_sequence():
+    """Animated sequence for casting (only this part changes)"""
     return [
-        "🎣 Getting ready to cast...",
-        "💫 Whoosh! Line flies through the air!",
-        "💦 *SPLASH!* Perfect landing!",
-        "🌊 Bait sinks into the depths..."
+        "💫 Взмах! Удочка летит через воздух!",
+        "💦 ПЛЮХ! Идеальное попадание!",
+        "🪱 Наживка медленно погружается...",
+        "🐟 Рыба начинает интересоваться наживкой!",
+        "✨ Подсекай с /hook, когда будешь готов..."
     ]
 
-def get_waiting_messages():
-    """Progressive waiting messages"""
-    return [
-        "🌊 Line in the water... waiting for a bite",
-        "🐟 Something moves in the depths...", 
-        "📍 The float bobs gently on the waves",
-        "🐠 Fish are getting curious about your bait",
-        "⚡ Energy builds in the water...",
-        "🔮 We can only wait and see what happens..."
-    ]
+def format_cast_message(header, animated_text):
+    """Combine header and animated text for casting message"""
+    return f"{header}\n\n{animated_text}"
 
-def get_status_description(pnl, time_fishing):
-    """Get dynamic status based on P&L and time"""
-    if pnl > 15:
-        return f"🦈 MASSIVE FISH SPOTTED! Something huge is fighting! ({time_fishing})"
-    elif pnl > 5:
-        return f"🐠 Good catch on the line! Fish is struggling! ({time_fishing})"
-    elif pnl > -5:
-        return f"🐟 Small fish nibbling... be patient ({time_fishing})"
-    elif pnl > -15:
-        return f"🌊 Fish diving deep, taking you down... ({time_fishing})"
-    else:
-        return f"🦐 Feels like an old boot... or worse ({time_fishing})"
+
         
+def get_hook_header(username, rod_name, pond_name, pond_pair, time_fishing, entry_price, current_price, leverage):
+    """Fixed hook header with key information"""
+    safe_username = username if username else "Рыбак"
+    
+    return (
+        f"🎣 <b>{safe_username} ПОДСЕКАЕТ!</b>\n\n"
+        f"Удочка: <b>{rod_name}</b>\n"
+        f"Водоем: <b>{pond_name}</b> ({pond_pair})\n"
+        f"⏱ Время рыбалки: <b>{time_fishing}</b>\n"
+        f"💰 Позиция: ${entry_price:.2f} → <b>${current_price:.2f}</b>\n"
+        f"Плечо: <b>{leverage}x</b>"
+    )
+
+def get_hook_animated_sequence():
+    """Animated sequence for hooking (only this part changes)"""
+    return [
+        "⚡ Подсекаем! Что-то на крючке!",
+        "🎣 Борьба началась! Тянем осторожно...",
+        "🌊 Сопротивление! Рыба не хочет сдаваться!",
+        "💫 Почти вытащили... последнее усилие!",
+        "🐟 Что-то поднимается из глубин!"
+    ]
+
+def format_hook_message(header, animated_text):
+    """Combine header and animated text for hook message"""
+    return f"{header}\n\n{animated_text}"
+
 def get_hook_tension_message(pnl):
     """Get tension-building message before revealing catch"""
     if pnl > 20:
-        return "🎣 EPIC BATTLE! The whole line is shaking! This is HUGE! 🌊💥"
+        return "🎣 ЭПИЧЕСКАЯ БИТВА! Вся леска трясется! Это что-то ОГРОМНОЕ! 🌊💥"
     elif pnl > 10:
-        return "🐠 Strong resistance! This fish has some fight in it! ⚡"
+        return "🐠 Сильное сопротивление! Эта рыба борется! ⚡"
     elif pnl > 0:
-        return "🐟 Something decent on the hook... let's see what we got! 🤔"
+        return "🐟 Что-то приличное на крючке... посмотрим что поймали! 🤔"
     elif pnl > -10:
-        return "🌊 Feels light... maybe just seaweed? 😅"
+        return "🌊 Ощущается легко... может просто водоросли? 😅"
     else:
-        return "🦐 Oh no... this feels like junk... 😬"
+        return "🦐 О нет... это похоже на мусор... 😬"
 
-def get_catch_story(fish_name, pnl, time_fishing):
-    """Get dramatic catch reveal story"""
-    stories = {
-        "🐋 Legendary Whale": [
-            f"🌊 The water EXPLODES as you pull up...",
-            f"🐋 A LEGENDARY WHALE emerges from the depths!", 
-            f"📸 Other fishermen stop to watch in awe!",
-            f"🏆 This will be remembered forever! (+{pnl:.1f}% in {time_fishing})"
-        ],
-        "🦈 Profit Shark": [
-            f"⚡ Something powerful breaks the surface!",
-            f"🦈 A fierce PROFIT SHARK in all its glory!",
-            f"💪 What a fight that was! Your arms are tired but happy!",
-            f"🎉 Excellent technique! (+{pnl:.1f}% in {time_fishing})"
-        ],
-        "🐠 Diamond Fin Bass": [
-            f"🌟 A beautiful fish shimmers in the sunlight!",
-            f"🐠 A stunning Diamond Fin Bass! ",
-            f"📱 Definitely worth a photo for the group!",
-            f"😊 Nice catch! (+{pnl:.1f}% in {time_fishing})"
-        ],
-        "🐟 Lucky Minnow": [
-            f"🐟 A small but lucky catch appears!",
-            f"🍀 Lucky Minnow - small but still counts!",
-            f"🎣 Every fish is a good fish!",
-            f"👍 Not bad! (+{pnl:.1f}% in {time_fishing})"
-        ],
-        "🐡 Pufferfish of Regret": [
-            f"😬 Uh oh... something weird on the hook...",
-            f"🐡 A Pufferfish of Regret inflates angrily!",
-            f"💸 This one's going to cost you...",
-            f"😅 Better luck next time! ({pnl:.1f}% in {time_fishing})"
-        ],
-        "🦐 Soggy Boot": [
-            f"🤦‍♂️ You feel the weight of disappointment...",
-            f"🦐 An old Soggy Boot... seriously?",
-            f"👢 Someone's trash became your... also trash",
-            f"💔 Rough day on the water... ({pnl:.1f}% in {time_fishing})"
-        ]
-    }
+def get_catch_story_from_db(fish_data, pnl, time_fishing):
+    """Get dramatic catch reveal story from database fish data"""
+    if not fish_data:
+        return f"🎣 Вы что-то поймали!\n📊 Результат: {pnl:+.1f}% за {time_fishing}"
     
-    return "\n".join(stories.get(fish_name, [
-        f"🎣 You caught something!",
-        f"🐟 {fish_name}",
-        f"📊 Result: {pnl:+.1f}% in {time_fishing}"
-    ]))
+    # Handle both old (12 fields) and new (13 fields with ai_prompt) formats
+    if len(fish_data) == 12:
+        _, fish_name, emoji, _, _, _, _, _, _, _, story_template, _ = fish_data
+    elif len(fish_data) == 13:  # 13 fields with ai_prompt at the end (after created_at)
+        _, fish_name, emoji, _, _, _, _, _, _, _, story_template, _, _ = fish_data
+    else:
+        # Safe fallback for unexpected formats
+        fish_name = fish_data[1] if len(fish_data) > 1 else "Неизвестная рыба"
+        emoji = fish_data[2] if len(fish_data) > 2 else "🐟"
+        story_template = fish_data[10] if len(fish_data) > 10 else None
+    
+    # Use story template from database
+    if story_template:
+        story = story_template.format(
+            emoji=emoji,
+            name=fish_name,
+            pnl=pnl,
+            time_fishing=time_fishing
+        )
+        return f"{story} ({pnl:+.1f}% за {time_fishing})"
+    
+    # Fallback to simple story
+    return f"🎣 Вы поймали {emoji} {fish_name}!\n📊 Результат: {pnl:+.1f}% за {time_fishing}"
+
 
 def get_help_text():
-    """Get help command text"""
-    return """
-🎣 **Fishing Bot Commands:**
+    """Get dynamic help command text from database"""
+    from src.database.db_manager import DATABASE_PATH
+    import sqlite3
+    
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Get fish statistics
+        cursor.execute('''
+            SELECT emoji, name, rarity, description, min_pnl, max_pnl, required_ponds, required_rods
+            FROM fish 
+            ORDER BY min_pnl DESC
+        ''')
+        fish_data = cursor.fetchall()
+        
+        # Get ponds count and info
+        cursor.execute('SELECT COUNT(*) FROM ponds WHERE is_active = 1')
+        ponds_count = cursor.fetchone()[0]
+        
+        cursor.execute('''
+            SELECT name, trading_pair, required_level 
+            FROM ponds 
+            WHERE is_active = 1 
+            ORDER BY required_level
+        ''')
+        ponds_data = cursor.fetchall()
+        
+        # Get rods count and leverage range
+        cursor.execute('SELECT COUNT(*) FROM rods')
+        rods_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT MIN(leverage), MAX(leverage) FROM rods')
+        leverage_range = cursor.fetchone()
+        
+        # Get starter bait amount (from user creation)
+        cursor.execute('SELECT bait_tokens FROM users WHERE bait_tokens = 10 LIMIT 1')
+        starter_bait = cursor.fetchone()
+        starter_bait_amount = starter_bait[0] if starter_bait else 10
+        
+        conn.close()
+        
+        # Build dynamic help text
+        help_text = """🎣 <b>КОМАНДЫ БОТА РЫБАЛКИ:</b>
 
-/cast - Cast your line into ETH waters (costs 1 🪱 BAIT)
-/hook - Reel in your catch and see what you got!  
-/status - Check your current fishing progress
-/test_card - Generate test fish cards (dev only)
-/help - Show this help message
+/cast - Закинуть удочку (стоимость: 1 🪱 BAIT)
+/hook - Вытащить улов и посмотреть что поймали!
+/status - Проверить текущий статус рыбалки
+/help - Показать это сообщение
 
-**How to play:**
-1. Use /cast to start fishing (2x leverage on ETH)
-2. Wait and watch the live updates
-3. Use /hook when you want to close your position
-4. Collect your fish NFT cards based on your trading performance!
+<b>🎮 КАК ИГРАТЬ:</b>
+1. Используйте /cast чтобы начать рыбалку
+2. Ждите и следите за анимацией заброса
+3. Используйте /status чтобы проверить прогресс
+4. Используйте /hook когда готовы завершить позицию
+5. Получите карточку рыбы в зависимости от результата!
 
-**Fish Types:**
-🦐 Soggy Boot (big loss) - Trash rarity
-🐡 Pufferfish of Regret (small loss) - Trash rarity
-🐟 Lucky Minnow (small profit) - Common rarity
-🐠 Diamond Fin Bass (good profit) - Rare rarity
-🦈 Profit Shark (great profit) - Epic rarity
-🐋 Legendary Whale (amazing profit!) - Legendary rarity
+<b>🐟 ТИПЫ РЫБ:</b>"""
+        
+        # Group fish by rarity
+        rarity_groups = {
+            'trash': [],
+            'common': [],
+            'rare': [],
+            'epic': [], 
+            'legendary': []
+        }
+        
+        special_fish = []
+        
+        for fish in fish_data:
+            emoji, name, rarity, _, min_pnl, max_pnl, required_ponds, required_rods = fish
+            
+            # Check if it's a special fish (has requirements)
+            if required_ponds or required_rods:
+                special_fish.append(fish)
+            else:
+                # Regular fish grouped by rarity
+                if rarity in rarity_groups:
+                    rarity_groups[rarity].append(fish)
+        
+        # Add regular fish by rarity
+        rarity_names = {
+            'trash': 'Мусор',
+            'common': 'Обычная', 
+            'rare': 'Редкая',
+            'epic': 'Эпическая',
+            'legendary': 'Легендарная'
+        }
+        
+        for rarity in ['legendary', 'epic', 'rare', 'common', 'trash']:
+            for fish in rarity_groups[rarity]:
+                emoji, name, _, _, min_pnl, max_pnl, _, _ = fish
+                pnl_desc = f"({min_pnl:+.0f}% to {max_pnl:+.0f}%)" if min_pnl != max_pnl else f"({min_pnl:+.0f}%)"
+                help_text += f"\n{emoji} {name} {pnl_desc} - {rarity_names[rarity]}"
+        
+        # Add special fish section if any exist
+        if special_fish:
+            help_text += "\n\n<b>🌟 ОСОБЫЕ РЫБЫ:</b>"
+            for fish in special_fish:
+                emoji, name, rarity, _, min_pnl, max_pnl, required_ponds, required_rods = fish
+                
+                # Build requirement description
+                requirements = []
+                if required_ponds:
+                    # Get pond names for requirements
+                    pond_ids = required_ponds.split(',')
+                    pond_names = []
+                    for pond_data in ponds_data:
+                        if str(ponds_data.index(pond_data) + 1) in pond_ids:
+                            pond_names.append(pond_data[0])
+                    if pond_names:
+                        requirements.append(f"только {'/'.join(pond_names)}")
+                
+                if required_rods:
+                    requirements.append("топовые удочки")
+                
+                req_text = ", ".join(requirements) if requirements else "особые условия"
+                help_text += f"\n{emoji} {name} - {req_text}"
+        
+        # Add dynamic system info
+        help_text += f"\n\n<b>⚙️ СИСТЕМА:</b>"
+        help_text += f"\n• {rods_count} типов удочек с плечом {leverage_range[0]}x до {leverage_range[1]}x"
+        help_text += f"\n• {ponds_count} торговых водоемов с разными криптопарами:"
+        
+        for pond in ponds_data[:4]:  # Show first 4 ponds
+            help_text += f"\n  └ {pond[0]} ({pond[1]}) - уровень {pond[2]}+"
+        
+        if ponds_count > 4:
+            help_text += f"\n  └ ... и еще {ponds_count - 4}"
+            
+        help_text += f"\n• Система уровней для разблокировки новых локаций"
+        help_text += f"\n• Новые игроки получают {starter_bait_amount} 🪱 BAIT токенов"
+        help_text += f"\n• Работает в групповых и личных чатах!"
+        
+        return help_text
+        
+    except Exception:
+        # Fallback to static text if database fails
+        return """🎣 <b>КОМАНДЫ БОТА РЫБАЛКИ:</b>
 
-New players get 10 🪱 BAIT tokens to start!
-Works in groups and private chats!
-    """
+/cast - Закинуть удочку (стоимость: 1 🪱 BAIT)
+/hook - Вытащить улов и посмотреть что поймали!
+/status - Проверить текущий статус рыбалки
+/help - Показать это сообщение
 
-def format_cast_initial_message(username, current_price, remaining_bait):
-    """Format the initial cast message"""
-    return (
-        f"🎣 {username} cast into ETH waters!\n\n"
-        f"🌊 Line is in the water... 2x leverage active\n"
-        f"💰 Entry price: ${current_price:.2f}\n"
-        f"🪱 BAIT used: 1 (Remaining: {remaining_bait})\n\n"
-        f"📍 Waiting for a bite... Use /hook when ready!"
-    )
+<i>⚠️ Система рыбалки временно недоступна для отображения.</i>
+🚀 Попробуйте /cast чтобы начать игру!"""
 
-def format_fishing_status_update(username, time_fishing, status_desc, waiting_msg, entry_price, current_price, current_pnl):
-    """Format fishing status update message"""
-    return (
-        f"🎣 {username} is fishing... ({time_fishing})\n\n"
-        f"{status_desc}\n\n"
-        f"{waiting_msg}\n\n"
-        f"💰 Entry: ${entry_price:.2f} | Current: ${current_price:.2f}\n"
-        f"📊 P&L: {current_pnl:+.1f}% (2x leverage)\n\n"
-        f"Use /hook to reel in your catch!"
-    )
 
-def format_final_waiting_message(username, time_fishing, entry_price, current_price, current_pnl):
-    """Format final waiting message"""
-    return (
-        f"🎣 {username} is fishing... ({time_fishing})\n\n"
-        f"🔮 Now we wait... the fish will decide when it's ready.\n\n"
-        f"💰 Entry: ${entry_price:.2f} | Current: ${current_price:.2f}\n"
-        f"📊 P&L: {current_pnl:+.1f}% (2x leverage)\n\n"
-        f"Use /hook when you feel the time is right!"
-    )
-
-def format_fishing_complete_caption(catch_story, pnl_percent, entry_price, current_price):
+def format_fishing_complete_caption(catch_story, pnl_percent, entry_price, current_price, leverage):
     """Format fishing complete photo caption"""
+    pnl_color = "🟢" if pnl_percent >= 0 else "🔴"
     return (
-        f"🏆 FISHING COMPLETE! 🏆\n\n"
+        f"🏆 <b>РЫБАЛКА ЗАВЕРШЕНА!</b> 🏆\n\n"
         f"{catch_story}\n\n"
-        f"📊 Final P&L: {pnl_percent:+.1f}% (2x leverage)\n"
-        f"💰 ${entry_price:.2f} → ${current_price:.2f}\n\n"
-        f"🎣 Ready for another cast? Use /cast again!"
+        f"<b>Финальный результат:</b>\n"
+        f"{pnl_color} P&L: <b>{pnl_percent:+.1f}%</b> (плечо {leverage}x)\n"
+        f"💰 Цена: ${entry_price:.2f} → ${current_price:.2f}\n\n"
+        f"🎣 Готовы к новому забросу? Используйте /cast!"
     )
 
-def format_status_message(username, status_desc, entry_price, current_price, current_pnl):
-    """Format status command message"""
+
+def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, leverage, entry_price, current_pnl, time_fishing):
+    """Format enhanced status command message with simple readable structure"""
+    safe_username = escape_markdown(username) if username else "Рыбак"
+    pnl_color = "🟢" if current_pnl >= 0 else "🔴"
+    
     return (
-        f"🎣 {username} fishing status:\n\n"
-        f"{status_desc}\n\n"
-        f"💰 Entry: ${entry_price:.2f} | Current: ${current_price:.2f}\n"
-        f"📊 P&L: {current_pnl:+.1f}% (2x leverage)\n\n"
-        f"Use /hook to reel in your catch!"
+        f"🎣 <b>Статус рыбалки {safe_username}:</b>\n\n"
+        f"Удочка: <b>{rod_name}</b>\n"
+        f"Водоем: <b>{pond_name}</b> ({pond_pair})\n"
+        f"⏱ Время рыбалки: <b>{time_fishing}</b>\n"
+        f"Стартовая позиция: <b>${entry_price:.2f}</b>\n"
+        f"{pnl_color} PnL: <b>{current_pnl:+.1f}%</b> (плечо {leverage}x)\n\n"
+        f"🪝 Используйте /hook чтобы вытащить улов!"
     )
 
 def format_no_fishing_status(username, bait_tokens):
     """Format status when user is not fishing"""
+    safe_username = escape_markdown(username) if username else "Рыбак"
+    
     return (
-        f"🎣 {username} is not currently fishing\n"
-        f"🪱 BAIT tokens: {bait_tokens}\n"
-        f"Use /cast to start fishing!"
+        f"🎣 <b>Статус рыбалки {safe_username}:</b>\n\n"
+        f"📊 Статус: <i>Не рыбачит</i>\n"
+        f"🪱 Токены BAIT: <b>{bait_tokens}</b>\n\n"
+        f"🚀 Используйте /cast чтобы начать рыбалку!"
     )
 
 def format_new_user_status(username):
     """Format status for new users"""
+    safe_username = escape_markdown(username) if username else "Рыбак"
+    
     return (
-        f"🎣 {username}, you haven't started fishing yet!\n"
-        f"Use /cast to begin your fishing adventure!"
+        f"🎣 <b>Статус рыбалки {safe_username}:</b>\n\n"
+        f"🆕 Статус: <b>Новый игрок</b>\n"
+        f"🪱 Токены BAIT: <b>10</b> (стартовый бонус)\n\n"
+        f"🚀 Используйте /cast чтобы начать рыбалку!"
     )

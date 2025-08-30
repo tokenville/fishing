@@ -6,12 +6,6 @@ Handles fishing animations, periodic status updates, and retry mechanisms.
 import asyncio
 import logging
 from io import BytesIO
-from src.database.db_manager import get_active_position
-from src.utils.eth_price import get_eth_price, calculate_pnl, format_time_fishing
-from src.bot.message_templates import (
-    get_waiting_messages, get_status_description, 
-    format_fishing_status_update, format_final_waiting_message
-)
 
 logger = logging.getLogger(__name__)
 
@@ -41,37 +35,137 @@ async def safe_reply_photo(update, photo_data: bytes, caption: str, max_retries:
                 logger.warning(f"Photo attempt {attempt + 1} failed, retrying: {e}")
                 await asyncio.sleep(1)
 
-async def animate_casting_sequence(message, cast_messages):
-    """Animate the casting sequence with messages"""
+async def safe_edit_message(message, text: str, max_retries: int = 3) -> None:
+    """Safely edit message text or caption depending on message type"""
+    for attempt in range(max_retries):
+        try:
+            # Check if message has video/photo (needs caption edit) or is text message
+            if message.video or message.photo:
+                await message.edit_caption(caption=text)
+            else:
+                await message.edit_text(text)
+            return
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Failed to edit message after {max_retries} attempts: {e}")
+            else:
+                logger.warning(f"Edit attempt {attempt + 1} failed, retrying: {e}")
+                await asyncio.sleep(1)
+
+async def animate_casting_sequence(message, username, user_level, entry_price, pond_id=None, rod_id=None):
+    """Animate the casting sequence with text-only messages"""
+    import random
+    from .message_templates import get_cast_header, get_cast_animated_sequence, format_cast_message
+    from src.database.db_manager import get_available_ponds, get_user_rods, get_pond_by_id, get_rod_by_id
+    
     try:
-        # Start with first message
-        cast_msg = await message.reply_text(cast_messages[0])
+        user_id = message.from_user.id
         
-        # Animate through remaining casting messages
-        for msg in cast_messages[1:]:
-            await asyncio.sleep(1)
-            await cast_msg.edit_text(msg)
+        # Use provided pond and rod if available, otherwise select randomly
+        if pond_id and rod_id:
+            selected_pond = get_pond_by_id(pond_id)
+            selected_rod = get_rod_by_id(rod_id)
+            
+            if not selected_pond or not selected_rod:
+                logger.error(f"Invalid pond_id {pond_id} or rod_id {rod_id}")
+                return None, None, None
+                
+            # Convert to expected format for compatibility
+            selected_pond = (pond_id, selected_pond[1], selected_pond[2])  # (id, name, trading_pair)
+            selected_rod = (rod_id, selected_rod[1], selected_rod[2])     # (id, name, leverage)
+        else:
+            # Original random selection logic
+            available_ponds = get_available_ponds(user_level)
+            user_rods = get_user_rods(user_id)
+            
+            # Fallback: ensure user has starter rod and access to starter pond
+            if not user_rods:
+                logger.warning(f"User {user_id} has no rods, giving starter rod")
+                from src.database.db_manager import give_starter_rod
+                give_starter_rod(user_id)
+                user_rods = get_user_rods(user_id)
+                
+            if not available_ponds:
+                logger.warning(f"User {user_id} has no available ponds for level {user_level}")
+                # Force access to starter pond (level 1) regardless of user level
+                available_ponds = get_available_ponds(1)
+                
+            if not available_ponds or not user_rods:
+                logger.error(f"Still no available ponds or rods for user {user_id} after fallback")
+                return None, None, None
+                
+            # Select random pond and rod
+            selected_pond = random.choice(available_ponds)
+            selected_rod = random.choice(user_rods)
         
-        return cast_msg
+        # Create fixed header with pond/rod info
+        pond_name = selected_pond[1]  # name column
+        pond_pair = selected_pond[2]  # trading_pair column (without extra parentheses)
+        rod_name = selected_rod[1]  # name column
+        leverage = selected_rod[2]  # leverage column
+        
+        header = get_cast_header(username, rod_name, pond_name, pond_pair, entry_price, leverage)
+        
+        # Get animated sequence
+        animated_sequence = get_cast_animated_sequence()
+        
+        # Send initial text message
+        initial_message = format_cast_message(header, animated_sequence[0])
+        cast_msg = await message.reply_text(initial_message)
+        
+        # Animate through remaining sequence (only the animated part changes)
+        for i, animated_text in enumerate(animated_sequence[1:]):
+            delay = 3.0 if i in [0, 3, 5] else 2.5  # Slower for readability
+            await asyncio.sleep(delay)
+            full_message = format_cast_message(header, animated_text)
+            try:
+                await cast_msg.edit_text(full_message)
+            except Exception as edit_error:
+                if "Message is not modified" in str(edit_error):
+                    logger.warning(f"Skipping duplicate message: {animated_text}")
+                    continue
+                else:
+                    raise
+        
+        # Return cast message and selected gear info for database
+        return cast_msg, selected_pond[0], selected_rod[0]  # return IDs for database
         
     except Exception as e:
+        import traceback
         logger.error(f"Error in casting animation: {e}")
-        return None
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None, None, None
 
-async def animate_hook_sequence(update, username, tension_msg):
-    """Animate the hook sequence"""
+async def animate_hook_sequence(update, username, rod_name, pond_name, pond_pair, 
+                                time_fishing, entry_price, current_price, leverage):
+    """Animate the hook sequence with structured messages like casting"""
+    from .message_templates import get_hook_header, get_hook_animated_sequence, format_hook_message
+    
     try:
-        # Step 1: Tension building
-        hook_msg = await update.message.reply_text(f"🎣 {username} SETS THE HOOK!\n\n{tension_msg}")
-        await asyncio.sleep(2)
+        # Create fixed header with rod/pond info (similar to casting)
+        header = get_hook_header(username, rod_name, pond_name, pond_pair, 
+                               time_fishing, entry_price, current_price, leverage)
         
-        # Step 2: Simple battle
-        await hook_msg.edit_text("⚡ Reeling in... almost there!")
-        await asyncio.sleep(2)
+        # Get animated sequence
+        animated_sequence = get_hook_animated_sequence()
         
-        # Step 3: Coming up from depths
-        await hook_msg.edit_text("🌊 Something is coming up from the depths!")
-        await asyncio.sleep(2)
+        # Send initial message with header + first animated text
+        initial_message = format_hook_message(header, animated_sequence[0])
+        hook_msg = await update.message.reply_text(initial_message)
+        
+        # Animate through remaining sequence (only the animated part changes)
+        for animated_text in animated_sequence[1:]:
+            delay = 2.5  # Consistent timing for hook sequence
+            await asyncio.sleep(delay)
+            full_message = format_hook_message(header, animated_text)
+            try:
+                await hook_msg.edit_text(full_message)
+            except Exception as edit_error:
+                if "Message is not modified" in str(edit_error):
+                    logger.warning(f"Skipping duplicate hook message: {animated_text}")
+                    continue
+                else:
+                    raise
         
         return hook_msg
         
@@ -79,78 +173,20 @@ async def animate_hook_sequence(update, username, tension_msg):
         logger.error(f"Error in hook animation: {e}")
         return None
 
-async def start_fishing_updates(message, user_id, username):
-    """Start periodic fishing status updates - simplified and reliable"""
-    waiting_messages = get_waiting_messages()
-    update_count = 0
-    
-    try:
-        # Wait 5 seconds before starting updates to let user read initial message
-        await asyncio.sleep(5)
-        
-        # Update every 10 seconds for 1 minute (6 updates total)
-        while update_count < 6:
-            await asyncio.sleep(10)
-            
-            # Check if position still active
-            position = get_active_position(user_id)
-            if not position:
-                break
-                
-            update_count += 1
-            
-            # Get current P&L and prices
-            current_price = get_eth_price()
-            entry_price = position[2]
-            current_pnl = calculate_pnl(entry_price, current_price, leverage=2.0)
-            time_fishing = format_time_fishing(position[3])
-            
-            # Get current status message
-            status_desc = get_status_description(current_pnl, time_fishing)
-            
-            # Get waiting message based on update count (fix indexing)
-            if update_count <= len(waiting_messages):
-                waiting_msg = waiting_messages[update_count - 1]
-            else:
-                waiting_msg = "🔮 We can only wait and see what happens..."
-            
-            # Create consolidated update message
-            updated_text = format_fishing_status_update(
-                username, time_fishing, status_desc, waiting_msg,
-                entry_price, current_price, current_pnl
-            )
-            
-            await message.edit_text(updated_text)
-        
-        # Final waiting message after 1 minute
-        if get_active_position(user_id):
-            position = get_active_position(user_id)
-            current_price = get_eth_price()
-            entry_price = position[2]
-            current_pnl = calculate_pnl(entry_price, current_price, leverage=2.0)
-            time_fishing = format_time_fishing(position[3])
-            
-            final_text = format_final_waiting_message(
-                username, time_fishing, entry_price, current_price, current_pnl
-            )
-            
-            await message.edit_text(final_text)
-                
-    except Exception as e:
-        logger.error(f"Error in fishing updates: {e}")
 
-async def send_fish_card_or_fallback(update, hook_msg, fish_card_image, fish_caught, 
-                                   pnl_percent, time_fishing, entry_price, current_price):
+async def send_fish_card_or_fallback(update, hook_msg, fish_card_image, fish_data, fish_name,
+                                   pnl_percent, time_fishing, entry_price, current_price, leverage):
     """Send fish card image or fallback to text message"""
-    from .message_templates import get_catch_story, format_fishing_complete_caption
+    from .message_templates import get_catch_story_from_db, format_fishing_complete_caption
     
     try:
         if fish_card_image:
-            logger.info(f"Sending fish card for {fish_caught}")
+            logger.info(f"Sending fish card for {fish_name}")
             
-            catch_story = get_catch_story(fish_caught, pnl_percent, time_fishing)
+            # Use new database-driven story system
+            catch_story = get_catch_story_from_db(fish_data, pnl_percent, time_fishing)
             caption = format_fishing_complete_caption(
-                catch_story, pnl_percent, entry_price, current_price
+                catch_story, pnl_percent, entry_price, current_price, leverage
             )
             
             # Send fish card as photo
@@ -168,9 +204,9 @@ async def send_fish_card_or_fallback(update, hook_msg, fish_card_image, fish_cau
     
     # Fallback to text-only message
     try:
-        catch_story = get_catch_story(fish_caught, pnl_percent, time_fishing)
+        catch_story = get_catch_story_from_db(fish_data, pnl_percent, time_fishing)
         final_message = format_fishing_complete_caption(
-            catch_story, pnl_percent, entry_price, current_price
+            catch_story, pnl_percent, entry_price, current_price, leverage
         )
         await hook_msg.edit_text(final_message)
         return False
