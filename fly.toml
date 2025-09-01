@@ -12,4 +12,4 @@ primary_region = "arn"
 # No public networking; this is a background worker (Telegram bot)
 # Dockerfile CMD runs the bot, but we also specify a process for clarity
 [processes]
-  worker = "python bot.py"
+  worker = "python main.py"

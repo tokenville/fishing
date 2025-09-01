@@ -23,28 +23,70 @@ class SimpleFishGenerator:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
 
-    async def generate_fish_card(self, fish_data: tuple, pnl: float, time_fishing: str) -> bytes:
+    async def generate_fish_card(self, fish_data) -> bytes:
         """Generate simple fish card with AI image using fish database data"""
         
-        # Handle both old and new fish data formats (with/without ai_prompt)
-        if len(fish_data) == 12:  # Old format without ai_prompt
-            fish_id, fish_name, emoji, description, min_pnl, max_pnl, min_user_level, required_ponds, required_rods, rarity, story_template, created_at = fish_data
-            ai_prompt = None
-        elif len(fish_data) == 13:  # New format with ai_prompt at the end
-            fish_id, fish_name, emoji, description, min_pnl, max_pnl, min_user_level, required_ponds, required_rods, rarity, story_template, created_at, ai_prompt = fish_data
+        # Handle both dict/Record and tuple formats
+        if hasattr(fish_data, 'keys') or isinstance(fish_data, dict):
+            # PostgreSQL asyncpg Record or dict format
+            logger.info(f"Received fish_data as dict/Record")
+            fish_id = fish_data['id']
+            fish_name = fish_data['name']
+            emoji = fish_data['emoji']
+            description = fish_data['description']
+            min_pnl = fish_data['min_pnl']
+            max_pnl = fish_data['max_pnl']
+            min_user_level = fish_data.get('min_user_level', 1)
+            required_ponds = fish_data.get('required_ponds', '')
+            required_rods = fish_data.get('required_rods', '')
+            rarity = fish_data['rarity']
+            story_template = fish_data.get('story_template', '')
+            ai_prompt = fish_data.get('ai_prompt')
         else:
-            # Unexpected format, use safe defaults
-            fish_id = fish_data[0]
-            fish_name = fish_data[1] if len(fish_data) > 1 else "Unknown Fish"
-            emoji = fish_data[2] if len(fish_data) > 2 else "🐟"
-            description = fish_data[3] if len(fish_data) > 3 else ""
-            rarity = fish_data[9] if len(fish_data) > 9 else "common"
-            ai_prompt = fish_data[12] if len(fish_data) > 12 else None
+            # Tuple format (legacy support for SQLite)
+            logger.info(f"Received fish_data as tuple with {len(fish_data)} elements")
+            logger.debug(f"Full fish_data: {fish_data}")
+            
+            if len(fish_data) >= 13:  # Full format with ai_prompt and created_at
+                fish_id = fish_data[0]
+                fish_name = fish_data[1]
+                emoji = fish_data[2]
+                description = fish_data[3]
+                min_pnl = fish_data[4]
+                max_pnl = fish_data[5]
+                min_user_level = fish_data[6]
+                required_ponds = fish_data[7]
+                required_rods = fish_data[8]
+                rarity = fish_data[9]
+                story_template = fish_data[10]
+                ai_prompt = fish_data[11]
+            elif len(fish_data) == 12:  # Old format without ai_prompt
+                fish_id = fish_data[0]
+                fish_name = fish_data[1]
+                emoji = fish_data[2]
+                description = fish_data[3]
+                min_pnl = fish_data[4]
+                max_pnl = fish_data[5]
+                min_user_level = fish_data[6]
+                required_ponds = fish_data[7]
+                required_rods = fish_data[8]
+                rarity = fish_data[9]
+                story_template = fish_data[10]
+                ai_prompt = None
+            else:
+                # Unexpected format, use safe defaults
+                fish_id = fish_data[0]
+                fish_name = fish_data[1] if len(fish_data) > 1 else "Unknown Fish"
+                emoji = fish_data[2] if len(fish_data) > 2 else "🐟"
+                description = fish_data[3] if len(fish_data) > 3 else ""
+                rarity = fish_data[9] if len(fish_data) > 9 else "common"
+                ai_prompt = fish_data[11] if len(fish_data) > 11 else None
         
         # Check database cache first
+        # Import async functions for PostgreSQL
         from src.database.db_manager import get_fish_image_cache, save_fish_image_cache, get_fish_ai_prompt
         
-        cached_image_path = get_fish_image_cache(fish_id, rarity)
+        cached_image_path = await get_fish_image_cache(fish_id, rarity)
         
         if cached_image_path and Path(cached_image_path).exists():
             logger.info(f"Using database cached image for {fish_name}")
@@ -65,16 +107,25 @@ class SimpleFishGenerator:
             
             # Use AI prompt from database if available, otherwise generate from data
             if ai_prompt:
+                logger.info(f"Using ai_prompt from fish_data for {fish_name}")
+                logger.info(f"AI_PROMPT: {ai_prompt}")
                 prompt = f"{ai_prompt}. {style_context}"
             else:
+                logger.info(f"ai_prompt is None/empty for {fish_name}, checking database...")
                 # Fallback to get AI prompt from database
-                db_prompt = get_fish_ai_prompt(fish_id)
+                db_prompt = await get_fish_ai_prompt(fish_id)
                 if db_prompt:
+                    logger.info(f"Using ai_prompt from database for {fish_name}: {db_prompt}")
                     prompt = f"{db_prompt}. {style_context}"
                 else:
+                    logger.warning(f"No AI prompt found for {fish_name} (ID: {fish_id}), using fallback")
                     # Fallback to simple description-based prompt
                     base_prompt = description if description else f"A fish representing {fish_name}"
+                    logger.info(f"Using fallback prompt for {fish_name}: {base_prompt}")
                     prompt = f"{base_prompt}. {style_context}"
+            
+            logger.info(f"Final prompt being sent to OpenRouter for {fish_name}:")
+            logger.info(f"PROMPT: {prompt}")
             
             cached_image = await self.generate_ai_image(prompt)
             
@@ -85,10 +136,10 @@ class SimpleFishGenerator:
             with open(image_path, 'wb') as f:
                 f.write(cached_image)
             
-            save_fish_image_cache(fish_id, rarity, str(image_path), cache_key)
+            await save_fish_image_cache(fish_id, rarity, str(image_path), cache_key)
         
-        # Create final card with text overlay
-        return self.create_simple_card(cached_image, f"{emoji} {fish_name}", pnl, time_fishing, rarity)
+        # Return raw AI-generated image without any overlay or frame
+        return cached_image
 
     def get_cache_key(self, fish_name: str, rarity: str) -> str:
         """Generate cache key"""
@@ -116,13 +167,22 @@ class SimpleFishGenerator:
             "modalities": ["image", "text"]
         }
         
+        logger.info(f"Sending request to OpenRouter API:")
+        logger.info(f"URL: {url}")
+        logger.info(f"Model: {payload['model']}")
+        logger.info(f"Content being sent: {prompt}")
+        logger.info(f"Full payload: {json.dumps(payload, indent=2)}")
+        
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as response:
+                logger.info(f"OpenRouter response status: {response.status}")
                 if response.status == 200:
                     data = await response.json()
+                    logger.info("OpenRouter API call successful, extracting image...")
                     return await self.extract_image_from_response(data)
                 else:
                     error_text = await response.text()
+                    logger.error(f"OpenRouter API error {response.status}: {error_text}")
                     raise Exception(f"API error {response.status}: {error_text}")
 
     async def extract_image_from_response(self, data: dict) -> bytes:
@@ -307,7 +367,7 @@ class FishPromptManager:
         
         fish = get_fish_by_name(fish_name)
         if fish:
-            _, name, _, description, _, _, _, _, _, rarity_db, _ = fish[:11]
+            _, name, _, description, _, _, _, _, _, _, _ = fish[:11]
             
             base_prompt = description if description else f"A fish representing {name}"
             return f"{base_prompt}. Square format, centered composition, high quality digital art, underwater scene."
@@ -366,7 +426,7 @@ class FishPromptManager:
 simple_generator = SimpleFishGenerator()
 prompt_manager = FishPromptManager()
 
-async def generate_fish_card_from_db(fish_data: tuple, pnl: float, time_fishing: str) -> bytes:
+async def generate_fish_card_from_db(fish_data) -> bytes:
     """Generate fish card image from database fish data"""
-    return await simple_generator.generate_fish_card(fish_data, pnl, time_fishing)
+    return await simple_generator.generate_fish_card(fish_data)
 

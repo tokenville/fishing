@@ -22,7 +22,8 @@ This is a Telegram bot for a virtual fishing game with cryptocurrency trading me
 
 The bot uses:
 - **python-telegram-bot** (v20.7) for async Telegram integration with HTML parse mode
-- **SQLite** database for comprehensive game data (users, rods, ponds, positions)
+- **PostgreSQL** database for comprehensive game data (users, rods, ponds, positions)
+- **asyncpg** for async PostgreSQL operations with connection pooling
 - **PIL (Pillow)** for generating fish card images
 - **CoinGecko API** for real-time crypto prices across multiple pairs
 - **OpenRouter API** for AI-powered fish image generation with database-stored prompts
@@ -37,7 +38,7 @@ src/
 │   ├── animations.py           # Fishing animations and status updates
 │   └── message_templates.py    # Dynamic message templates from database
 ├── database/
-│   └── db_manager.py           # SQLite database operations with fish system
+│   └── db_manager.py           # PostgreSQL database operations with fish system
 ├── utils/
 │   └── crypto_price.py         # Multi-currency price fetching and P&L calculations
 └── generators/
@@ -47,7 +48,7 @@ src/
 Key files:
 - `main.py` - Entry point with bot initialization, conflict handling, and HTML parse mode setup
 - `src/bot/command_handlers.py` - All Telegram command implementations with new fish system
-- `src/database/db_manager.py` - Extended database operations (users, positions, fish, AI prompts, image caching)
+- `src/database/db_manager.py` - Extended PostgreSQL database operations (users, positions, fish, AI prompts, image caching)
 - `src/utils/crypto_price.py` - Multi-currency price fetching and timezone-safe time formatting
 - `src/generators/fish_card_generator.py` - AI-powered fish card generation with database-stored prompts
 - `src/bot/message_templates.py` - HTML-formatted dynamic templates with database-driven help system
@@ -91,7 +92,7 @@ fly secrets set OPENROUTER_API_KEY="your_openrouter_key_here"
 
 ## Database Schema
 
-SQLite database (`fishing_bot.db`) is created automatically with:
+PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 
 ### Core Tables:
 - **`users`** - Player profiles with level/experience system
@@ -130,6 +131,7 @@ SQLite database (`fishing_bot.db`) is created automatically with:
 
 ### Environment Variables:
 - `TELEGRAM_BOT_TOKEN` - Required bot token from @BotFather
+- `DATABASE_URL` - PostgreSQL connection string (automatically set by Fly.io)
 - `OPENROUTER_API_KEY` - Optional for AI-generated fish images
 
 ### Animation System:

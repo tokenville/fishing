@@ -118,7 +118,7 @@ async def main():
             print(f"🧪 Тестируем генерацию карточки для '{fish_name}'...")
             try:
                 # Генерируем карточку рыбы
-                card_image = await generate_fish_card_from_db(fish_data, 125.5, "3мин 45с")
+                card_image = await generate_fish_card_from_db(fish_data)
                 
                 # Сохраняем тестовое изображение
                 test_image_path = f"test_card_{fish_name.replace(' ', '_')}.png"
