@@ -89,7 +89,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Get actual crypto price before animation
         pond = await get_pond_by_id(pond_id)
         base_currency = pond['base_currency'] if pond else 'ETH'
-        current_price = get_crypto_price(base_currency)
+        current_price = await get_crypto_price(base_currency)
         
         # Create position IMMEDIATELY at market price (before animation)
         await create_position_with_gear(user_id, pond_id, rod_id, current_price)
@@ -127,7 +127,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         base_currency = pond['base_currency'] if pond else 'ETH'
         leverage = rod['leverage'] if rod else 1.5
         
-        current_price = get_crypto_price(base_currency)
+        current_price = await get_crypto_price(base_currency)
         entry_price = position['entry_price']
         
         # Calculate P&L with leverage
@@ -232,7 +232,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         base_currency = pond['base_currency'] if pond else 'ETH'
         leverage = rod['leverage'] if rod else 1.5
         
-        current_price = get_crypto_price(base_currency)
+        current_price = await get_crypto_price(base_currency)
         entry_price = position['entry_price']
         
         pnl_percent = calculate_pnl(entry_price, current_price, leverage)
@@ -253,6 +253,67 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error in status command: {e}")
         await safe_reply(update, "🎣 Ошибка при проверке статуса! Попробуйте еще раз.")
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start command - show personalized user stats and welcome"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    
+    try:
+        # Get or create user
+        user = await get_user(user_id)
+        if not user:
+            await create_user(user_id, username)
+            user = await get_user(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh after starter rod
+        else:
+            # Ensure existing user has level and starter rod
+            await ensure_user_has_level(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh user data
+        
+        # Get user statistics
+        user_level = user['level'] if user else 1
+        bait_tokens = user['bait_tokens'] if user else 10
+        experience = user['experience'] if user else 0
+        
+        # Check if user is currently fishing
+        active_position = await get_active_position(user_id)
+        
+        # Get user's available equipment count
+        user_rods = await get_user_rods(user_id)
+        available_ponds = await get_available_ponds(user_level)
+        rods_count = len(user_rods) if user_rods else 0
+        ponds_count = len(available_ponds) if available_ponds else 0
+        
+        # Create personalized start message
+        status_emoji = "🎣" if active_position else "🌊"
+        fishing_status = "Сейчас рыбачите!" if active_position else "Готов к рыбалке"
+        
+        start_message = f"""<b>🎣 Добро пожаловать, {username}!</b>
+
+{status_emoji} <b>Ваша статистика:</b>
+━━━━━━━━━━━━━━━━━━━━
+🎯 <b>Уровень:</b> {user_level}
+⚡ <b>Опыт:</b> {experience} XP
+🪱 <b>Токены $BAIT:</b> {bait_tokens}
+🎣 <b>Удочек:</b> {rods_count}
+🌊 <b>Доступно водоемов:</b> {ponds_count}
+📊 <b>Статус:</b> {fishing_status}
+
+<b>🎮 Быстрый старт:</b>
+• /cast - Забросить удочку
+• /status - Проверить прогресс
+• /help - Полная справка
+
+<i>Каждый заброс стоит 1 токен $BAIT!</i>"""
+        
+        await safe_reply(update, start_message)
+        
+    except Exception as e:
+        logger.error(f"Error in start command: {e}")
+        await safe_reply(update, "🎣 Добро пожаловать! Используйте /help для справки.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command - show dynamic help from database"""

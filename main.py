@@ -7,8 +7,8 @@ import os
 import logging
 from telegram.ext import Application, CommandHandler, Defaults
 
-from src.database.db_manager import init_database
-from src.bot.command_handlers import cast, hook, status, test_card, help_command
+from src.database.db_manager import init_database, close_pool
+from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command
 
 # Enable logging with less verbose output
 logging.basicConfig(
@@ -38,7 +38,7 @@ def create_application():
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("test_card", test_card))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("start", help_command))
+    application.add_handler(CommandHandler("start", start_command))
     
     return application
 
@@ -50,6 +50,8 @@ async def startup(application):
 async def shutdown(application):
     """Clean up resources"""
     logger.info("🧹 Cleaning up resources...")
+    await close_pool()
+    logger.info("✅ Database pool closed")
     logger.info("✅ Shutdown completed")
 
 def main():

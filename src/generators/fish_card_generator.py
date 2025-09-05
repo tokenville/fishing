@@ -162,7 +162,7 @@ class SimpleFishGenerator:
         
         url = "https://openrouter.ai/api/v1/chat/completions"
         payload = {
-            "model": "google/gemini-2.5-flash-image-preview:free",
+            "model": "google/gemini-2.5-flash-image-preview",
             "messages": [{"role": "user", "content": prompt}],
             "modalities": ["image", "text"]
         }

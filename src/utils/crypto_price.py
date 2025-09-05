@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 from datetime import datetime, timezone
 
 # Mapping of base currencies to CoinGecko IDs
@@ -25,7 +26,7 @@ FALLBACK_PRICES = {
     'DOT': 7.0
 }
 
-def get_crypto_price(base_currency):
+async def get_crypto_price(base_currency):
     """Get current price for any supported cryptocurrency"""
     try:
         if base_currency not in COINGECKO_IDS:
@@ -40,22 +41,24 @@ def get_crypto_price(base_currency):
         }
         
         print(f"Fetching {base_currency} price from CoinGecko...")
-        response = requests.get(url, params=params, timeout=10)
-        print(f"Response status: {response.status_code}")
         
-        if response.status_code == 429:
-            print(f"Rate limited! Headers: {dict(response.headers)}")
-            raise requests.exceptions.HTTPError("Rate limited by CoinGecko API")
-            
-        response.raise_for_status()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                print(f"Response status: {response.status}")
+                
+                if response.status == 429:
+                    print(f"Rate limited! Headers: {dict(response.headers)}")
+                    raise aiohttp.ClientResponseError(response.request_info, response.history, status=429, message="Rate limited by CoinGecko API")
+                    
+                response.raise_for_status()
+                data = await response.json()
         
-        data = response.json()
         price = data[coingecko_id]['usd']
         print(f"Successfully fetched {base_currency} price: ${price}")
         
         return float(price)
     
-    except requests.exceptions.RequestException as e:
+    except aiohttp.ClientError as e:
         print(f"Network error fetching {base_currency} price: {e}")
         # Use more realistic fallback prices instead of 1.0
         fallback = FALLBACK_PRICES.get(base_currency, FALLBACK_PRICES.get('ETH', 2500.0))
@@ -68,9 +71,9 @@ def get_crypto_price(base_currency):
         print(f"Using fallback price {fallback} for {base_currency}")
         return fallback
 
-def get_eth_price():
+async def get_eth_price():
     """Get current ETH/USDT price from CoinGecko (backward compatibility)"""
-    return get_crypto_price('ETH')
+    return await get_crypto_price('ETH')
 
 def calculate_pnl(entry_price, exit_price, leverage=2.0):
     """Calculate P&L with leverage"""

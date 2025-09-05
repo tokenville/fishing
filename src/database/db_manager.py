@@ -1,16 +1,66 @@
 import asyncpg
 import os
-from datetime import datetime
 import asyncio
+import logging
+from typing import Optional, List, Dict, Any
+import json
+from datetime import datetime
 
-# PostgreSQL connection URL from environment
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/fishing_bot')
+logger = logging.getLogger(__name__)
+
+# Database connection settings
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://localhost/fishing_bot')
+
+# Connection pool
+_pool: Optional[asyncpg.Pool] = None
+
+async def get_pool() -> asyncpg.Pool:
+    """Get or create connection pool optimized for high load"""
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=10,  # Higher minimum for always-ready connections
+            max_size=50,  # Higher maximum for hundreds of concurrent users
+            max_queries=50000,  # High query limit per connection
+            max_inactive_connection_lifetime=300.0,  # 5 minutes
+            command_timeout=30,  # Reduced timeout for faster failure detection
+            server_settings={
+                'jit': 'off',  # Disable JIT for consistent performance
+                'application_name': 'fishing_bot'
+            }
+        )
+    return _pool
+
+async def close_pool():
+    """Close connection pool"""
+    global _pool
+    if _pool:
+        await _pool.close()
+        _pool = None
+
+async def retry_db_operation(operation, max_retries=3, delay=0.1):
+    """Retry database operations with exponential backoff"""
+    for attempt in range(max_retries):
+        try:
+            return await operation()
+        except (asyncpg.ConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError) as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Database operation failed after {max_retries} attempts: {e}")
+                raise
+            wait_time = delay * (2 ** attempt)
+            logger.warning(f"Database operation failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
+            await asyncio.sleep(wait_time)
+        except Exception as e:
+            # Don't retry non-connection errors
+            logger.error(f"Database operation failed with non-retriable error: {e}")
+            raise
 
 async def init_database():
     """Initialize the database with required tables"""
-    conn = await asyncpg.connect(DATABASE_URL)
+    pool = await get_pool()
     
-    try:
+    async with pool.acquire() as conn:
         # Create users table with level system
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -65,7 +115,26 @@ async def init_database():
             )
         ''')
         
-        # Create updated positions table
+        # Create fish table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS fish (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                emoji TEXT,
+                description TEXT,
+                min_pnl REAL,
+                max_pnl REAL,
+                min_user_level INTEGER DEFAULT 1,
+                required_ponds TEXT,
+                required_rods TEXT,
+                rarity TEXT DEFAULT 'common',
+                story_template TEXT,
+                ai_prompt TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create positions table (matching SQLite schema)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS positions (
                 id SERIAL PRIMARY KEY,
@@ -86,25 +155,6 @@ async def init_database():
             )
         ''')
         
-        # Create fish table
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS fish (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                emoji TEXT,
-                description TEXT,
-                min_pnl REAL,
-                max_pnl REAL,
-                min_user_level INTEGER DEFAULT 1,
-                required_ponds TEXT,
-                required_rods TEXT,
-                rarity TEXT DEFAULT 'common',
-                story_template TEXT,
-                ai_prompt TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
         # Create fish_images table for caching generated images
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS fish_images (
@@ -118,93 +168,79 @@ async def init_database():
             )
         ''')
         
-        # Insert default ponds
+        # Insert default data
         await _insert_default_ponds(conn)
-        # Insert default rods  
         await _insert_default_rods(conn)
-        # Insert default fish
         await _insert_default_fish(conn)
         
-        print("Database initialized successfully!")
-    finally:
-        await conn.close()
+    print("Database initialized successfully!")
 
-async def get_user(telegram_id):
+async def get_user(telegram_id: int) -> Optional[asyncpg.Record]:
     """Get user by telegram_id"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        user = await conn.fetchrow('SELECT * FROM users WHERE telegram_id = $1', telegram_id)
-        return dict(user) if user else None
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            'SELECT * FROM users WHERE telegram_id = $1', 
+            telegram_id
+        )
 
-async def create_user(telegram_id, username):
+async def create_user(telegram_id: int, username: str):
     """Create new user with default BAIT tokens and starter rod"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         await conn.execute('''
             INSERT INTO users (telegram_id, username, bait_tokens, level, experience)
             VALUES ($1, $2, 10, 1, 0)
+            ON CONFLICT (telegram_id) DO NOTHING
         ''', telegram_id, username)
-        
-        # Give starter rod
-        await give_starter_rod(telegram_id)
-        print(f"Created user: {username} ({telegram_id}) with starter rod")
-    finally:
-        await conn.close()
+    
+    # Give starter rod
+    await give_starter_rod(telegram_id)
+    print(f"Created user: {username} ({telegram_id}) with starter rod")
 
-async def get_active_position(telegram_id):
+async def get_active_position(telegram_id: int) -> Optional[asyncpg.Record]:
     """Get user's active fishing position"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        position = await conn.fetchrow('''
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
             SELECT * FROM positions 
             WHERE user_id = $1 AND status = 'active'
             ORDER BY entry_time DESC LIMIT 1
         ''', telegram_id)
-        return dict(position) if position else None
-    finally:
-        await conn.close()
 
-async def create_position(telegram_id, entry_price):
+async def create_position(telegram_id: int, entry_price: float):
     """Create new fishing position"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         await conn.execute('''
             INSERT INTO positions (user_id, entry_price)
             VALUES ($1, $2)
         ''', telegram_id, entry_price)
-        print(f"Created position for user {telegram_id} at price {entry_price}")
-    finally:
-        await conn.close()
+    print(f"Created position for user {telegram_id} at price {entry_price}")
 
-async def close_position(position_id, exit_price, pnl_percent, fish_caught_id):
+async def close_position(position_id: int, exit_price: float, pnl_percent: float, fish_caught_id: int):
     """Close fishing position and record results"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         await conn.execute('''
             UPDATE positions 
-            SET status = 'closed', exit_price = $2, exit_time = CURRENT_TIMESTAMP,
-                pnl_percent = $3, fish_caught_id = $4
-            WHERE id = $1
-        ''', position_id, exit_price, pnl_percent, fish_caught_id)
-    finally:
-        await conn.close()
+            SET status = 'closed', exit_price = $1, exit_time = CURRENT_TIMESTAMP,
+                pnl_percent = $2, fish_caught_id = $3
+            WHERE id = $4
+        ''', exit_price, pnl_percent, fish_caught_id, position_id)
 
-async def use_bait(telegram_id):
+async def use_bait(telegram_id: int) -> bool:
     """Use 1 BAIT token for fishing"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         result = await conn.execute('''
             UPDATE users 
             SET bait_tokens = bait_tokens - 1
             WHERE telegram_id = $1 AND bait_tokens > 0
         ''', telegram_id)
-        return result != 'UPDATE 0'
-    finally:
-        await conn.close()
+        return result.split()[-1] != '0'
 
-async def _insert_default_ponds(conn):
+async def _insert_default_ponds(conn: asyncpg.Connection):
     """Insert default ponds if they don't exist"""
     count = await conn.fetchval('SELECT COUNT(*) FROM ponds')
     if count == 0:
@@ -224,7 +260,7 @@ async def _insert_default_ponds(conn):
             VALUES ($1, $2, $3, $4, $5, $6, $7)
         ''', ponds_data)
 
-async def _insert_default_rods(conn):
+async def _insert_default_rods(conn: asyncpg.Connection):
     """Insert default rods if they don't exist"""
     count = await conn.fetchval('SELECT COUNT(*) FROM rods')
     if count == 0:
@@ -244,62 +280,85 @@ async def _insert_default_rods(conn):
             VALUES ($1, $2, $3, $4, $5, $6)
         ''', rods_data)
 
-async def _insert_default_fish(conn):
-    """Insert default fish if they don't exist - only basic ones, full sync via sync_fish_database.py"""
+async def _insert_default_fish(conn: asyncpg.Connection):
+    """Insert default fish if they don't exist"""
     count = await conn.fetchval('SELECT COUNT(*) FROM fish')
     if count == 0:
-        fish_data = [
-            ('Старый Сапог', '🦐', 'Мусор со дна водоема', -100, -20, 1, '', '', 'trash', 
-             'Вы чувствуете груз разочарования... {emoji} {name}... серьезно? Чей-то мусор стал вашим... тоже мусором.',
-             'An old waterlogged leather boot lying on the ocean floor, murky water, disappointing, low quality'),
+        # Import from existing absurd_fish_data.py
+        try:
+            from absurd_fish_data import ABSURD_FISH_DATA
+            fish_data = []
+            for fish in ABSURD_FISH_DATA:
+                fish_data.append((
+                    fish['name'],
+                    fish['emoji'],
+                    fish['description'],
+                    fish['min_pnl'],
+                    fish['max_pnl'],
+                    fish.get('min_user_level', 1),
+                    fish.get('required_ponds', ''),
+                    fish.get('required_rods', ''),
+                    fish['rarity'],
+                    fish.get('story_template', ''),
+                    fish.get('ai_prompt', '')
+                ))
             
-            ('Счастливая Плотва', '🐟', 'Маленькая, но приносящая удачу', 0, 10, 1, '', '', 'common',
-             'Маленький, но счастливый улов! {emoji} {name} - маленькая, но считается!',
-             'A small shiny silver minnow fish swimming gracefully, clear water, simple, clean')
-        ]
-        
-        await conn.executemany('''
-            INSERT INTO fish (name, emoji, description, min_pnl, max_pnl, min_user_level, required_ponds, required_rods, rarity, story_template, ai_prompt)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ''', fish_data)
+            await conn.executemany('''
+                INSERT INTO fish (name, emoji, description, min_pnl, max_pnl, min_user_level, 
+                                required_ponds, required_rods, rarity, story_template, ai_prompt)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ''', fish_data)
+            print(f"Inserted {len(fish_data)} fish from absurd_fish_data.py")
+        except ImportError:
+            # Fallback to basic fish if absurd_fish_data.py not available
+            fish_data = [
+                ('Старый Сапог', '🦐', 'Мусор со дна водоема', -100, -20, 1, '', '', 'trash', 
+                 'Вы чувствуете груз разочарования... {emoji} {name}... серьезно?', ''),
+                ('Счастливая Плотва', '🐟', 'Маленькая, но приносящая удачу', 0, 10, 1, '', '', 'common',
+                 'Маленький, но счастливый улов появляется! {emoji} {name}!', ''),
+            ]
+            await conn.executemany('''
+                INSERT INTO fish (name, emoji, description, min_pnl, max_pnl, min_user_level, 
+                                required_ponds, required_rods, rarity, story_template, ai_prompt)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ''', fish_data)
 
-async def get_available_ponds(user_level):
+async def get_available_ponds(user_level: int) -> List[asyncpg.Record]:
     """Get ponds available for user level"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        ponds = await conn.fetch('''
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
             SELECT * FROM ponds 
             WHERE required_level <= $1 AND is_active = true
             ORDER BY required_level
         ''', user_level)
-        return [dict(pond) for pond in ponds]
-    finally:
-        await conn.close()
 
-async def get_user_rods(telegram_id):
+async def get_user_rods(telegram_id: int) -> List[asyncpg.Record]:
     """Get all rods owned by user"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        rods = await conn.fetch('''
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
             SELECT r.* FROM rods r
             JOIN user_rods ur ON r.id = ur.rod_id
             WHERE ur.user_id = $1
             ORDER BY r.leverage
         ''', telegram_id)
-        return [dict(rod) for rod in rods]
-    finally:
-        await conn.close()
 
-async def give_starter_rod(telegram_id):
+async def give_starter_rod(telegram_id: int):
     """Give starter rod to user if they don't have any"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         # Check if user already has rods
-        has_rods = await conn.fetchval('SELECT COUNT(*) FROM user_rods WHERE user_id = $1', telegram_id)
+        has_rods = await conn.fetchval(
+            'SELECT COUNT(*) FROM user_rods WHERE user_id = $1', 
+            telegram_id
+        )
         
-        if has_rods == 0:
+        if not has_rods:
             # Get starter rod ID
-            starter_rod_id = await conn.fetchval('SELECT id FROM rods WHERE is_starter = true LIMIT 1')
+            starter_rod_id = await conn.fetchval(
+                'SELECT id FROM rods WHERE is_starter = true LIMIT 1'
+            )
             
             if starter_rod_id:
                 await conn.execute('''
@@ -308,158 +367,134 @@ async def give_starter_rod(telegram_id):
                     ON CONFLICT (user_id, rod_id) DO NOTHING
                 ''', telegram_id, starter_rod_id)
                 print(f"Gave starter rod to user {telegram_id}")
-    finally:
-        await conn.close()
 
-async def ensure_user_has_level(telegram_id):
+async def ensure_user_has_level(telegram_id: int):
     """Ensure user has level and experience columns set"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         # Check if user has level set
-        level = await conn.fetchval('SELECT level FROM users WHERE telegram_id = $1', telegram_id)
+        level = await conn.fetchval(
+            'SELECT level FROM users WHERE telegram_id = $1', 
+            telegram_id
+        )
         
-        if not level:
+        if level is None:
             await conn.execute('''
                 UPDATE users 
                 SET level = 1, experience = 0 
                 WHERE telegram_id = $1
             ''', telegram_id)
             print(f"Set default level for user {telegram_id}")
-    finally:
-        await conn.close()
 
-async def create_position_with_gear(telegram_id, pond_id, rod_id, entry_price):
+async def create_position_with_gear(telegram_id: int, pond_id: int, rod_id: int, entry_price: float):
     """Create new fishing position with specific pond and rod"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         await conn.execute('''
             INSERT INTO positions (user_id, pond_id, rod_id, entry_price)
             VALUES ($1, $2, $3, $4)
         ''', telegram_id, pond_id, rod_id, entry_price)
-        print(f"Created position for user {telegram_id} with pond {pond_id} and rod {rod_id}")
-    finally:
-        await conn.close()
+    print(f"Created position for user {telegram_id} with pond {pond_id} and rod {rod_id}")
 
-async def get_pond_by_id(pond_id):
+async def get_pond_by_id(pond_id: int) -> Optional[asyncpg.Record]:
     """Get pond by ID"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        pond = await conn.fetchrow('SELECT * FROM ponds WHERE id = $1', pond_id)
-        return dict(pond) if pond else None
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('SELECT * FROM ponds WHERE id = $1', pond_id)
 
-async def get_rod_by_id(rod_id):
+async def get_rod_by_id(rod_id: int) -> Optional[asyncpg.Record]:
     """Get rod by ID"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        rod = await conn.fetchrow('SELECT * FROM rods WHERE id = $1', rod_id)
-        return dict(rod) if rod else None
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('SELECT * FROM rods WHERE id = $1', rod_id)
 
-async def get_suitable_fish(pnl_percent, user_level, pond_id, rod_id):
+async def get_suitable_fish(pnl_percent: float, user_level: int, pond_id: int, rod_id: int) -> Optional[asyncpg.Record]:
     """Get fish that can be caught based on conditions with rarity weighting"""
     import random
     
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        # Get all fish that match basic conditions (PnL range and user level)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Get all fish that match basic conditions
         all_matching_fish = await conn.fetch('''
             SELECT * FROM fish 
-            WHERE min_pnl <= $1 AND max_pnl >= $2 AND min_user_level <= $3
-        ''', pnl_percent, pnl_percent, user_level)
+            WHERE min_pnl <= $1 AND max_pnl >= $1 AND min_user_level <= $2
+        ''', pnl_percent, user_level)
+    
+    if not all_matching_fish:
+        return None
+    
+    # Filter fish based on pond and rod requirements
+    suitable_fish = []
+    
+    for fish in all_matching_fish:
+        # Check pond requirement
+        pond_ok = True
+        if fish['required_ponds'] and fish['required_ponds'].strip():
+            pond_list = [p.strip() for p in fish['required_ponds'].split(',')]
+            pond_ok = str(pond_id) in pond_list
         
-        if not all_matching_fish:
-            return None
+        # Check rod requirement  
+        rod_ok = True
+        if fish['required_rods'] and fish['required_rods'].strip():
+            rod_list = [r.strip() for r in fish['required_rods'].split(',')]
+            rod_ok = str(rod_id) in rod_list
         
-        # Filter fish based on pond and rod requirements
-        suitable_fish = []
-        
-        for fish in all_matching_fish:
-            fish_dict = dict(fish)
-            
-            # Check pond requirement
-            pond_ok = True
-            required_ponds = fish_dict.get('required_ponds', '')
-            if required_ponds and required_ponds.strip():
-                pond_list = [p.strip() for p in required_ponds.split(',')]
-                pond_ok = str(pond_id) in pond_list
-            
-            # Check rod requirement  
-            rod_ok = True
-            required_rods = fish_dict.get('required_rods', '')
-            if required_rods and required_rods.strip():
-                rod_list = [r.strip() for r in required_rods.split(',')]
-                rod_ok = str(rod_id) in rod_list
-            
-            if pond_ok and rod_ok:
-                suitable_fish.append(fish_dict)
-        
-        if not suitable_fish:
-            return None
-        
-        # Apply rarity-based weighting for selection
-        rarity_weights = {
-            'trash': 1.0,      # Most common
-            'common': 0.8,     # Common  
-            'rare': 0.4,       # Less common
-            'epic': 0.15,      # Rare
-            'legendary': 0.05  # Very rare
-        }
-        
-        # Create weighted list for random selection
-        weighted_fish = []
-        for fish in suitable_fish:
-            rarity = fish.get('rarity', 'common')
-            weight = rarity_weights.get(rarity, 0.5)
-            # Add fish to list multiple times based on weight
-            copies = max(1, int(weight * 20))
-            weighted_fish.extend([fish] * copies)
-        
-        # Randomly select from weighted list
-        selected_fish = random.choice(weighted_fish)
-        return selected_fish
-    finally:
-        await conn.close()
+        if pond_ok and rod_ok:
+            suitable_fish.append(fish)
+    
+    if not suitable_fish:
+        return None
+    
+    # Apply rarity-based weighting for selection
+    rarity_weights = {
+        'trash': 1.0,
+        'common': 0.8,
+        'rare': 0.4,
+        'epic': 0.15,
+        'legendary': 0.05
+    }
+    
+    # Create weighted list for random selection
+    weighted_fish = []
+    for fish in suitable_fish:
+        rarity = fish['rarity']
+        weight = rarity_weights.get(rarity, 0.5)
+        copies = max(1, int(weight * 20))
+        weighted_fish.extend([fish] * copies)
+    
+    # Randomly select from weighted list
+    return random.choice(weighted_fish)
 
-async def get_fish_by_id(fish_id):
+async def get_fish_by_id(fish_id: int) -> Optional[asyncpg.Record]:
     """Get fish by ID"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        fish = await conn.fetchrow('SELECT * FROM fish WHERE id = $1', fish_id)
-        return dict(fish) if fish else None
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('SELECT * FROM fish WHERE id = $1', fish_id)
 
-async def get_fish_image_cache(fish_id, rarity):
+async def get_fish_image_cache(fish_id: int, rarity: str) -> Optional[str]:
     """Get cached image for fish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         result = await conn.fetchval('''
             SELECT image_path FROM fish_images 
             WHERE fish_id = $1 AND rarity = $2
         ''', fish_id, rarity)
         return result
-    finally:
-        await conn.close()
 
-async def save_fish_image_cache(fish_id, rarity, image_path, cache_key):
+async def save_fish_image_cache(fish_id: int, rarity: str, image_path: str, cache_key: str):
     """Save generated image to cache"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         await conn.execute('''
             INSERT INTO fish_images (fish_id, rarity, image_path, cache_key)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (cache_key) DO UPDATE SET image_path = EXCLUDED.image_path
+            ON CONFLICT (cache_key) DO UPDATE SET image_path = $3
         ''', fish_id, rarity, image_path, cache_key)
-    finally:
-        await conn.close()
 
-async def get_user_stats(telegram_id):
+async def get_user_stats(telegram_id: int) -> Optional[Dict[str, Any]]:
     """Get comprehensive user statistics"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         # Get basic user info
         user_data = await conn.fetchrow('''
             SELECT username, bait_tokens, level, experience, created_at
@@ -500,65 +535,81 @@ async def get_user_stats(telegram_id):
         ''', telegram_id)
         
         return {
-            'user': dict(user_data),
-            'fishing': dict(fishing_stats),
-            'fish_collection': [dict(fish) for fish in fish_collection],
-            'rods': [dict(rod) for rod in owned_rods]
+            'user': user_data,
+            'fishing': fishing_stats,
+            'fish_collection': fish_collection,
+            'rods': owned_rods
         }
-    finally:
-        await conn.close()
 
 # AI Prompt Management Functions
-async def get_fish_ai_prompt(fish_id):
+async def get_fish_ai_prompt(fish_id: int) -> Optional[str]:
     """Get AI prompt for specific fish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        result = await conn.fetchval('SELECT ai_prompt FROM fish WHERE id = $1', fish_id)
-        return result
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchval('SELECT ai_prompt FROM fish WHERE id = $1', fish_id)
 
-async def update_fish_ai_prompt(fish_id, ai_prompt):
+async def update_fish_ai_prompt(fish_id: int, ai_prompt: str) -> bool:
     """Update AI prompt for specific fish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        result = await conn.execute('UPDATE fish SET ai_prompt = $1 WHERE id = $2', ai_prompt, fish_id)
-        return result != 'UPDATE 0'
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            'UPDATE fish SET ai_prompt = $1 WHERE id = $2', 
+            ai_prompt, fish_id
+        )
+        return result.split()[-1] != '0'
 
-async def get_all_fish_prompts():
+async def get_all_fish_prompts() -> List[asyncpg.Record]:
     """Get all fish with their AI prompts for bulk management"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        fish_prompts = await conn.fetch('''
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
             SELECT id, name, emoji, rarity, ai_prompt 
             FROM fish 
             ORDER BY rarity, name
         ''')
-        return [dict(fish) for fish in fish_prompts]
-    finally:
-        await conn.close()
 
-async def update_fish_prompts_bulk(prompts_data):
+async def update_fish_prompts_bulk(prompts_data: List[tuple]) -> int:
     """Update multiple fish prompts at once"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        await conn.executemany('''
-            UPDATE fish SET ai_prompt = $1 WHERE id = $2
-        ''', [(prompt, fish_id) for fish_id, prompt in prompts_data])
-        return len(prompts_data)
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # PostgreSQL doesn't support executemany for UPDATE efficiently
+        # Use a transaction with multiple updates
+        updated_count = 0
+        async with conn.transaction():
+            for fish_id, prompt in prompts_data:
+                result = await conn.execute(
+                    'UPDATE fish SET ai_prompt = $1 WHERE id = $2',
+                    prompt, fish_id
+                )
+                if result.split()[-1] != '0':
+                    updated_count += 1
+        return updated_count
 
-async def get_fish_by_name(fish_name):
+async def get_fish_by_name(fish_name: str) -> Optional[asyncpg.Record]:
     """Get fish by name for easier prompt management"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        fish = await conn.fetchrow('SELECT * FROM fish WHERE name = $1', fish_name)
-        return dict(fish) if fish else None
-    finally:
-        await conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('SELECT * FROM fish WHERE name = $1', fish_name)
 
-if __name__ == "__main__":
-    asyncio.run(init_database())
+# Legacy compatibility function
+async def get_suitable_fish_old(pnl_percent: float, user_level: int, pond_id: int, rod_id: int) -> Optional[asyncpg.Record]:
+    """Legacy fish selection - kept for compatibility"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT * FROM fish 
+            WHERE min_pnl <= $1 AND max_pnl >= $1 AND min_user_level <= $2
+            ORDER BY 
+                CASE 
+                    WHEN required_ponds = '' THEN 1 
+                    WHEN position('%s' in required_ponds) > 0 THEN 0
+                    ELSE 2
+                END,
+                CASE 
+                    WHEN required_rods = '' THEN 1 
+                    WHEN position('%s' in required_rods) > 0 THEN 0
+                    ELSE 2
+                END,
+                RANDOM()
+            LIMIT 1
+        ''' % (str(pond_id), str(rod_id)), pnl_percent, user_level)

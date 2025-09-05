@@ -106,39 +106,36 @@ def get_catch_story_from_db(fish_data):
 
 async def get_help_text():
     """Get dynamic help command text from database"""
-    import asyncpg
-    from src.database.db_manager import DATABASE_URL
+    from src.database.db_manager import get_pool
     
     try:
-        conn = await asyncpg.connect(DATABASE_URL)
-        
-        # Get fish statistics
-        fish_data = await conn.fetch('''
-            SELECT emoji, name, rarity, description, min_pnl, max_pnl, required_ponds, required_rods
-            FROM fish 
-            ORDER BY min_pnl DESC
-        ''')
-        
-        # Get ponds count and info
-        ponds_count = await conn.fetchval('SELECT COUNT(*) FROM ponds WHERE is_active = true')
-        
-        ponds_data = await conn.fetch('''
-            SELECT name, trading_pair, required_level 
-            FROM ponds 
-            WHERE is_active = true 
-            ORDER BY required_level
-        ''')
-        
-        # Get rods count and leverage range
-        rods_count = await conn.fetchval('SELECT COUNT(*) FROM rods')
-        
-        leverage_range = await conn.fetchrow('SELECT MIN(leverage), MAX(leverage) FROM rods')
-        
-        # Get starter bait amount (from user creation)
-        starter_bait = await conn.fetchrow('SELECT bait_tokens FROM users WHERE bait_tokens = 10 LIMIT 1')
-        starter_bait_amount = starter_bait['bait_tokens'] if starter_bait else 10
-        
-        await conn.close()
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            # Get fish statistics
+            fish_data = await conn.fetch('''
+                SELECT emoji, name, rarity, description, min_pnl, max_pnl, required_ponds, required_rods
+                FROM fish 
+                ORDER BY min_pnl DESC
+            ''')
+            
+            # Get ponds count and info
+            ponds_count = await conn.fetchval('SELECT COUNT(*) FROM ponds WHERE is_active = true')
+            
+            ponds_data = await conn.fetch('''
+                SELECT name, trading_pair, required_level 
+                FROM ponds 
+                WHERE is_active = true 
+                ORDER BY required_level
+            ''')
+            
+            # Get rods count and leverage range
+            rods_count = await conn.fetchval('SELECT COUNT(*) FROM rods')
+            
+            leverage_range = await conn.fetchrow('SELECT MIN(leverage), MAX(leverage) FROM rods')
+            
+            # Get starter bait amount (from user creation)
+            starter_bait = await conn.fetchrow('SELECT bait_tokens FROM users WHERE bait_tokens = 10 LIMIT 1')
+            starter_bait_amount = starter_bait['bait_tokens'] if starter_bait else 10
         
         # Build dynamic help text
         help_text = """🎣 <b>КОМАНДЫ БОТА РЫБАЛКИ:</b>
