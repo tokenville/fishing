@@ -16,6 +16,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Semaphore for concurrent AI image generation (limit to 3 concurrent requests)
+_ai_generation_semaphore = asyncio.Semaphore(3)
+
 class SimpleFishGenerator:
     """Simple fish card generator with square images and minimal frame"""
     
@@ -85,58 +88,74 @@ class SimpleFishGenerator:
         # Check database cache first
         # Import async functions for PostgreSQL
         from src.database.db_manager import get_fish_image_cache, save_fish_image_cache, get_fish_ai_prompt
+        from src.utils.bunny_cdn import cdn_uploader
         
-        cached_image_path = await get_fish_image_cache(fish_id, rarity)
+        cache_info = await get_fish_image_cache(fish_id, rarity)
         
-        if cached_image_path and Path(cached_image_path).exists():
-            logger.info(f"Using database cached image for {fish_name}")
-            with open(cached_image_path, 'rb') as f:
-                cached_image = f.read()
+        if cache_info:
+            # If we have CDN URL, we're done (return from local cache)
+            if cache_info.get('cdn_url'):
+                logger.info(f"Fish {fish_name} already has CDN URL: {cache_info['cdn_url']}")
+            
+            # Try to use local cached image
+            if cache_info.get('image_path') and Path(cache_info['image_path']).exists():
+                logger.info(f"Using database cached image for {fish_name}")
+                with open(cache_info['image_path'], 'rb') as f:
+                    cached_image = f.read()
+                return cached_image
+        
+        # No cache found, generate new image
+        logger.info(f"Generating new image for {fish_name} ({rarity})")
+        
+        # Static style description for consistent quality
+        style_context = (
+            "Absurd and unexpected artwork, intentionally crude digital drawing, "
+            "MS Paint style, flat colors, rough outlines, naive composition, "
+            "awkward proportions, exaggerated features, comedic surrealism, "
+            "funny and playful, intentionally low-quality, "
+            "square format (1:1 aspect ratio), centered subject"
+        )
+        
+        # Use AI prompt from database if available, otherwise generate from data
+        if ai_prompt:
+            logger.info(f"Using ai_prompt from fish_data for {fish_name}")
+            logger.info(f"AI_PROMPT: {ai_prompt}")
+            prompt = f"{ai_prompt}. {style_context}"
         else:
-            logger.info(f"Generating new image for {fish_name} ({rarity})")
-            
-            # Static style description for consistent quality
-            style_context = (
-                "Absurd and unexpected artwork, intentionally crude digital drawing, "
-                "MS Paint style, flat colors, rough outlines, naive composition, "
-                "awkward proportions, exaggerated features, comedic surrealism, "
-                "funny and playful, intentionally low-quality, "
-                "square format (1:1 aspect ratio), centered subject"
-            )
-
-            
-            # Use AI prompt from database if available, otherwise generate from data
-            if ai_prompt:
-                logger.info(f"Using ai_prompt from fish_data for {fish_name}")
-                logger.info(f"AI_PROMPT: {ai_prompt}")
-                prompt = f"{ai_prompt}. {style_context}"
+            logger.info(f"ai_prompt is None/empty for {fish_name}, checking database...")
+            # Fallback to get AI prompt from database
+            db_prompt = await get_fish_ai_prompt(fish_id)
+            if db_prompt:
+                logger.info(f"Using ai_prompt from database for {fish_name}: {db_prompt}")
+                prompt = f"{db_prompt}. {style_context}"
             else:
-                logger.info(f"ai_prompt is None/empty for {fish_name}, checking database...")
-                # Fallback to get AI prompt from database
-                db_prompt = await get_fish_ai_prompt(fish_id)
-                if db_prompt:
-                    logger.info(f"Using ai_prompt from database for {fish_name}: {db_prompt}")
-                    prompt = f"{db_prompt}. {style_context}"
-                else:
-                    logger.warning(f"No AI prompt found for {fish_name} (ID: {fish_id}), using fallback")
-                    # Fallback to simple description-based prompt
-                    base_prompt = description if description else f"A fish representing {fish_name}"
-                    logger.info(f"Using fallback prompt for {fish_name}: {base_prompt}")
-                    prompt = f"{base_prompt}. {style_context}"
+                logger.warning(f"No AI prompt found for {fish_name} (ID: {fish_id}), using fallback")
+                # Fallback to simple description-based prompt
+                base_prompt = description if description else f"A fish representing {fish_name}"
+                logger.info(f"Using fallback prompt for {fish_name}: {base_prompt}")
+                prompt = f"{base_prompt}. {style_context}"
+        
+        logger.info(f"Final prompt being sent to OpenRouter for {fish_name}:")
+        logger.info(f"PROMPT: {prompt}")
             
-            logger.info(f"Final prompt being sent to OpenRouter for {fish_name}:")
-            logger.info(f"PROMPT: {prompt}")
-            
-            cached_image = await self.generate_ai_image(prompt)
-            
-            # Save to database cache
-            cache_key = self.get_cache_key(fish_name, rarity)
-            image_path = self.cache_dir / f"{cache_key}.png"
-            
-            with open(image_path, 'wb') as f:
-                f.write(cached_image)
-            
-            await save_fish_image_cache(fish_id, rarity, str(image_path), cache_key)
+        cached_image = await self.generate_ai_image(prompt)
+        
+        # Save to local cache and upload to CDN
+        cache_key = self.get_cache_key(fish_name, rarity)
+        image_path = self.cache_dir / f"{cache_key}.png"
+        
+        with open(image_path, 'wb') as f:
+            f.write(cached_image)
+        
+        # Upload to CDN
+        cdn_url = await cdn_uploader.upload_fish_image(fish_id, rarity, cached_image)
+        if cdn_url:
+            logger.info(f"Uploaded {fish_name} to CDN: {cdn_url}")
+        else:
+            logger.warning(f"Failed to upload {fish_name} to CDN, using local storage")
+        
+        # Save to database with CDN URL
+        await save_fish_image_cache(fish_id, rarity, str(image_path), cache_key, cdn_url)
         
         # Return raw AI-generated image without any overlay or frame
         return cached_image
@@ -147,43 +166,44 @@ class SimpleFishGenerator:
         return hashlib.md5(key_string.encode()).hexdigest()
 
     async def generate_ai_image(self, prompt: str) -> bytes:
-        """Generate AI image using OpenRouter"""
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        
-        if not api_key:
-            raise Exception("OPENROUTER_API_KEY is required for image generation")
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/fishing-bot",
-            "X-Title": "Fishing Bot"
-        }
-        
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        payload = {
-            "model": "google/gemini-2.5-flash-image-preview",
-            "messages": [{"role": "user", "content": prompt}],
-            "modalities": ["image", "text"]
-        }
-        
-        logger.info(f"Sending request to OpenRouter API:")
-        logger.info(f"URL: {url}")
-        logger.info(f"Model: {payload['model']}")
-        logger.info(f"Content being sent: {prompt}")
-        logger.info(f"Full payload: {json.dumps(payload, indent=2)}")
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as response:
-                logger.info(f"OpenRouter response status: {response.status}")
-                if response.status == 200:
-                    data = await response.json()
-                    logger.info("OpenRouter API call successful, extracting image...")
-                    return await self.extract_image_from_response(data)
-                else:
-                    error_text = await response.text()
-                    logger.error(f"OpenRouter API error {response.status}: {error_text}")
-                    raise Exception(f"API error {response.status}: {error_text}")
+        """Generate AI image using OpenRouter with concurrency control"""
+        async with _ai_generation_semaphore:  # Limit concurrent AI generations
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            
+            if not api_key:
+                raise Exception("OPENROUTER_API_KEY is required for image generation")
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/fishing-bot",
+                "X-Title": "Fishing Bot"
+            }
+            
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            payload = {
+                "model": "google/gemini-2.5-flash-image-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "modalities": ["image", "text"]
+            }
+            
+            logger.info(f"Sending request to OpenRouter API:")
+            logger.info(f"URL: {url}")
+            logger.info(f"Model: {payload['model']}")
+            logger.info(f"Content being sent: {prompt}")
+            logger.info(f"Full payload: {json.dumps(payload, indent=2)}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    logger.info(f"OpenRouter response status: {response.status}")
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info("OpenRouter API call successful, extracting image...")
+                        return await self.extract_image_from_response(data)
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"OpenRouter API error {response.status}: {error_text}")
+                        raise Exception(f"API error {response.status}: {error_text}")
 
     async def extract_image_from_response(self, data: dict) -> bytes:
         """Extract image from OpenRouter response"""

@@ -5,6 +5,8 @@ import logging
 from typing import Optional, List, Dict, Any
 import json
 from datetime import datetime
+from collections import defaultdict
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -13,23 +15,33 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://localhost/fishing_bot')
 
 # Connection pool
 _pool: Optional[asyncpg.Pool] = None
+_pool_lock = asyncio.Lock()
+
+# Rate limiting
+_user_rate_limits: Dict[int, float] = defaultdict(float)
+_rate_limit_lock = asyncio.Lock()
+RATE_LIMIT_COMMANDS = 10  # Max commands per minute
+RATE_LIMIT_WINDOW = 60  # Window in seconds
 
 async def get_pool() -> asyncpg.Pool:
-    """Get or create connection pool optimized for high load"""
+    """Get or create connection pool optimized for high load with thread safety"""
     global _pool
     if _pool is None:
-        _pool = await asyncpg.create_pool(
-            DATABASE_URL,
-            min_size=10,  # Higher minimum for always-ready connections
-            max_size=50,  # Higher maximum for hundreds of concurrent users
-            max_queries=50000,  # High query limit per connection
-            max_inactive_connection_lifetime=300.0,  # 5 minutes
-            command_timeout=30,  # Reduced timeout for faster failure detection
-            server_settings={
-                'jit': 'off',  # Disable JIT for consistent performance
-                'application_name': 'fishing_bot'
-            }
-        )
+        async with _pool_lock:
+            # Double-check pattern for thread safety
+            if _pool is None:
+                _pool = await asyncpg.create_pool(
+                    DATABASE_URL,
+                    min_size=10,  # Higher minimum for always-ready connections
+                    max_size=50,  # Higher maximum for hundreds of concurrent users
+                    max_queries=50000,  # High query limit per connection
+                    max_inactive_connection_lifetime=300.0,  # 5 minutes
+                    command_timeout=30,  # Reduced timeout for faster failure detection
+                    server_settings={
+                        'jit': 'off',  # Disable JIT for consistent performance
+                        'application_name': 'fishing_bot'
+                    }
+                )
     return _pool
 
 async def close_pool():
@@ -51,10 +63,50 @@ async def retry_db_operation(operation, max_retries=3, delay=0.1):
             wait_time = delay * (2 ** attempt)
             logger.warning(f"Database operation failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
             await asyncio.sleep(wait_time)
-        except Exception as e:
-            # Don't retry non-connection errors
-            logger.error(f"Database operation failed with non-retriable error: {e}")
-            raise
+
+async def check_rate_limit(user_id: int) -> bool:
+    """Check if user has exceeded rate limit
+    
+    Returns:
+        True if user can proceed, False if rate limited
+    """
+    async with _rate_limit_lock:
+        now = time.time()
+        user_history = _user_rate_limits.get(user_id, [])
+        
+        # Clean old entries outside the window
+        if isinstance(user_history, list):
+            user_history = [t for t in user_history if now - t < RATE_LIMIT_WINDOW]
+        else:
+            # Handle legacy format
+            user_history = []
+        
+        # Check if exceeds limit
+        if len(user_history) >= RATE_LIMIT_COMMANDS:
+            return False
+        
+        # Add current request
+        user_history.append(now)
+        _user_rate_limits[user_id] = user_history
+        
+        return True
+
+async def cleanup_rate_limits():
+    """Cleanup old rate limit entries (run periodically)"""
+    async with _rate_limit_lock:
+        now = time.time()
+        to_remove = []
+        
+        for user_id, history in _user_rate_limits.items():
+            if isinstance(history, list):
+                cleaned = [t for t in history if now - t < RATE_LIMIT_WINDOW]
+                if not cleaned:
+                    to_remove.append(user_id)
+                else:
+                    _user_rate_limits[user_id] = cleaned
+        
+        for user_id in to_remove:
+            del _user_rate_limits[user_id]
 
 async def init_database():
     """Initialize the database with required tables"""
@@ -98,8 +150,17 @@ async def init_database():
                 image_url TEXT,
                 rarity TEXT DEFAULT 'common',
                 is_starter BOOLEAN DEFAULT false,
+                rod_type TEXT DEFAULT 'neutral',
+                visual_id TEXT DEFAULT 'default',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ''')
+        
+        # Add new columns if they don't exist (migration)
+        await conn.execute('''
+            ALTER TABLE rods 
+            ADD COLUMN IF NOT EXISTS rod_type TEXT DEFAULT 'neutral',
+            ADD COLUMN IF NOT EXISTS visual_id TEXT DEFAULT 'default'
         ''')
         
         # Create user_rods table (many-to-many relationship)
@@ -112,6 +173,19 @@ async def init_database():
                 FOREIGN KEY (user_id) REFERENCES users (telegram_id),
                 FOREIGN KEY (rod_id) REFERENCES rods (id),
                 UNIQUE(user_id, rod_id)
+            )
+        ''')
+        
+        # Create user_settings table for active rod selection
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT UNIQUE,
+                active_rod_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (active_rod_id) REFERENCES rods (id)
             )
         ''')
         
@@ -163,9 +237,16 @@ async def init_database():
                 rarity TEXT NOT NULL,
                 image_path TEXT NOT NULL,
                 cache_key TEXT NOT NULL UNIQUE,
+                cdn_url TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (fish_id) REFERENCES fish (id)
             )
+        ''')
+        
+        # Add cdn_url column if it doesn't exist (migration)
+        await conn.execute('''
+            ALTER TABLE fish_images 
+            ADD COLUMN IF NOT EXISTS cdn_url TEXT
         ''')
         
         # Insert default data
@@ -265,19 +346,21 @@ async def _insert_default_rods(conn: asyncpg.Connection):
     count = await conn.fetchval('SELECT COUNT(*) FROM rods')
     if count == 0:
         rods_data = [
-            ('🎣 Стартовая удочка', 1.5, 0, None, 'common', True),
-            ('🌊 Морская удочка', 2.0, 50, None, 'common', False),
-            ('⚡ Электрическая удочка', 2.5, 100, None, 'rare', False),
-            ('🔥 Огненная удочка', 3.0, 200, None, 'rare', False),
-            ('💎 Алмазная удочка', 3.5, 500, None, 'epic', False),
-            ('🌙 Лунная удочка', 4.0, 1000, None, 'epic', False),
-            ('☀️ Солнечная удочка', 5.0, 2000, None, 'legendary', False),
-            ('🎯 Мастерская удочка', 6.0, 5000, None, 'legendary', False)
+            # Long/Short стартовые удочки для трейдинга
+            ('🚀 Long удочка', 2.0, 0, None, 'common', True, 'long', 'long'),
+            ('🔻 Short удочка', -2.0, 0, None, 'common', True, 'short', 'short'),
+            # Дополнительные удочки для разнообразия
+            ('🌊 Морская удочка', 2.5, 100, None, 'rare', False, 'long', 'long'),
+            ('⚡ Электрическая удочка', -2.5, 100, None, 'rare', False, 'short', 'short'),
+            ('💎 Алмазная удочка', 3.0, 500, None, 'epic', False, 'long', 'long'),
+            ('🌙 Лунная удочка', -3.0, 500, None, 'epic', False, 'short', 'short'),
+            ('☀️ Солнечная удочка', 4.0, 2000, None, 'legendary', False, 'long', 'long'),
+            ('🎯 Мастерская удочка', -4.0, 2000, None, 'legendary', False, 'short', 'short')
         ]
         
         await conn.executemany('''
-            INSERT INTO rods (name, leverage, price, image_url, rarity, is_starter)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO rods (name, leverage, price, image_url, rarity, is_starter, rod_type, visual_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ''', rods_data)
 
 async def _insert_default_fish(conn: asyncpg.Connection):
@@ -345,7 +428,7 @@ async def get_user_rods(telegram_id: int) -> List[asyncpg.Record]:
         ''', telegram_id)
 
 async def give_starter_rod(telegram_id: int):
-    """Give starter rod to user if they don't have any"""
+    """Give both starter rods (Long & Short) to user if they don't have any"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         # Check if user already has rods
@@ -355,18 +438,30 @@ async def give_starter_rod(telegram_id: int):
         )
         
         if not has_rods:
-            # Get starter rod ID
-            starter_rod_id = await conn.fetchval(
-                'SELECT id FROM rods WHERE is_starter = true LIMIT 1'
+            # Get both starter rod IDs
+            starter_rods = await conn.fetch(
+                'SELECT id FROM rods WHERE is_starter = true ORDER BY rod_type'
             )
             
-            if starter_rod_id:
+            for starter_rod in starter_rods:
                 await conn.execute('''
                     INSERT INTO user_rods (user_id, rod_id)
                     VALUES ($1, $2)
                     ON CONFLICT (user_id, rod_id) DO NOTHING
-                ''', telegram_id, starter_rod_id)
-                print(f"Gave starter rod to user {telegram_id}")
+                ''', telegram_id, starter_rod['id'])
+            
+            print(f"Gave {len(starter_rods)} starter rods to user {telegram_id}")
+            
+            # Set Long rod as default active rod
+            long_rod = await conn.fetchrow(
+                'SELECT id FROM rods WHERE is_starter = true AND rod_type = \'long\' LIMIT 1'
+            )
+            if long_rod:
+                await conn.execute('''
+                    INSERT INTO user_settings (user_id, active_rod_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET active_rod_id = $2
+                ''', telegram_id, long_rod['id'])
 
 async def ensure_user_has_level(telegram_id: int):
     """Ensure user has level and experience columns set"""
@@ -471,25 +566,46 @@ async def get_fish_by_id(fish_id: int) -> Optional[asyncpg.Record]:
     async with pool.acquire() as conn:
         return await conn.fetchrow('SELECT * FROM fish WHERE id = $1', fish_id)
 
-async def get_fish_image_cache(fish_id: int, rarity: str) -> Optional[str]:
-    """Get cached image for fish"""
+async def get_fish_image_cache(fish_id: int, rarity: str) -> Optional[Dict[str, str]]:
+    """Get cached image for fish - returns dict with image_path and cdn_url"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        result = await conn.fetchval('''
-            SELECT image_path FROM fish_images 
+        result = await conn.fetchrow('''
+            SELECT image_path, cdn_url FROM fish_images 
             WHERE fish_id = $1 AND rarity = $2
         ''', fish_id, rarity)
-        return result
+        if result:
+            return dict(result)
+        return None
 
-async def save_fish_image_cache(fish_id: int, rarity: str, image_path: str, cache_key: str):
-    """Save generated image to cache"""
+async def save_fish_image_cache(fish_id: int, rarity: str, image_path: str, cache_key: str, cdn_url: str = None):
+    """Save generated image to cache with optional CDN URL"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute('''
-            INSERT INTO fish_images (fish_id, rarity, image_path, cache_key)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (cache_key) DO UPDATE SET image_path = $3
-        ''', fish_id, rarity, image_path, cache_key)
+            INSERT INTO fish_images (fish_id, rarity, image_path, cache_key, cdn_url)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (cache_key) DO UPDATE 
+            SET image_path = $3, cdn_url = $5
+        ''', fish_id, rarity, image_path, cache_key, cdn_url)
+
+async def get_total_fish_count() -> int:
+    """Get total number of fish in database"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchval('SELECT COUNT(*) FROM fish')
+        return result or 0
+
+async def get_user_unique_fish_count(telegram_id: int) -> int:
+    """Get count of unique fish caught by user"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchval('''
+            SELECT COUNT(DISTINCT fish_caught_id) 
+            FROM positions 
+            WHERE user_id = $1 AND fish_caught_id IS NOT NULL
+        ''', telegram_id)
+        return result or 0
 
 async def get_user_stats(telegram_id: int) -> Optional[Dict[str, Any]]:
     """Get comprehensive user statistics"""
@@ -613,3 +729,151 @@ async def get_suitable_fish_old(pnl_percent: float, user_level: int, pond_id: in
                 RANDOM()
             LIMIT 1
         ''' % (str(pond_id), str(rod_id)), pnl_percent, user_level)
+
+# === WEB APP FUNCTIONS ===
+
+async def get_user_fish_collection(user_id: int) -> List[asyncpg.Record]:
+    """Get user's fish collection with detailed information for web app"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
+            SELECT 
+                p.id as position_id,
+                p.pnl_percent,
+                p.exit_time,
+                f.id as fish_id,
+                f.name as fish_name,
+                f.emoji as fish_emoji,
+                f.description as fish_description,
+                f.rarity as fish_rarity,
+                r.name as rod_name,
+                pond.name as pond_name
+            FROM positions p
+            LEFT JOIN fish f ON p.fish_caught_id = f.id
+            LEFT JOIN rods r ON p.rod_id = r.id
+            LEFT JOIN ponds pond ON p.pond_id = pond.id
+            WHERE p.user_id = $1 AND p.fish_caught_id IS NOT NULL
+            ORDER BY p.exit_time DESC
+        ''', user_id)
+
+async def get_user_fish_history(user_id: int, fish_id: int) -> List[asyncpg.Record]:
+    """Get all catches of a specific fish by user"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
+            SELECT 
+                p.pnl_percent,
+                p.exit_time,
+                p.entry_time,
+                r.name as rod_name,
+                pond.name as pond_name,
+                pond.trading_pair
+            FROM positions p
+            LEFT JOIN rods r ON p.rod_id = r.id
+            LEFT JOIN ponds pond ON p.pond_id = pond.id
+            WHERE p.user_id = $1 AND p.fish_caught_id = $2
+            ORDER BY p.exit_time DESC
+        ''', user_id, fish_id)
+
+async def get_user_statistics(user_id: int) -> Optional[asyncpg.Record]:
+    """Get comprehensive user statistics for web app"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT 
+                u.telegram_id,
+                u.username,
+                u.level,
+                u.experience,
+                u.bait_tokens,
+                u.created_at,
+                COUNT(DISTINCT p.fish_caught_id) as unique_fish_caught,
+                COUNT(p.id) as total_catches,
+                AVG(p.pnl_percent) as average_pnl,
+                MAX(p.pnl_percent) as best_pnl,
+                MIN(p.pnl_percent) as worst_pnl
+            FROM users u
+            LEFT JOIN positions p ON u.telegram_id = p.user_id AND p.fish_caught_id IS NOT NULL
+            WHERE u.telegram_id = $1
+            GROUP BY u.telegram_id, u.username, u.level, u.experience, u.bait_tokens, u.created_at
+        ''', user_id)
+
+# === ACTIVE ROD MANAGEMENT ===
+
+async def get_user_active_rod(user_id: int) -> Optional[asyncpg.Record]:
+    """Get user's currently active rod"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT r.* FROM user_settings us
+            JOIN rods r ON us.active_rod_id = r.id
+            WHERE us.user_id = $1
+        ''', user_id)
+
+async def set_user_active_rod(user_id: int, rod_id: int) -> bool:
+    """Set user's active rod. Returns True if successful"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Verify user owns the rod
+        ownership = await conn.fetchval('''
+            SELECT 1 FROM user_rods WHERE user_id = $1 AND rod_id = $2
+        ''', user_id, rod_id)
+        
+        if not ownership:
+            return False
+        
+        # Upsert user settings
+        await conn.execute('''
+            INSERT INTO user_settings (user_id, active_rod_id, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET active_rod_id = $2, updated_at = CURRENT_TIMESTAMP
+        ''', user_id, rod_id)
+        
+        return True
+
+async def ensure_user_has_active_rod(user_id: int) -> Optional[asyncpg.Record]:
+    """Ensure user has an active rod set. If not, set first available Long rod as active"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Check if user already has active rod
+        active_rod = await conn.fetchrow('''
+            SELECT r.* FROM user_settings us
+            JOIN rods r ON us.active_rod_id = r.id
+            WHERE us.user_id = $1
+        ''', user_id)
+        
+        if active_rod:
+            return active_rod
+        
+        # Find first Long rod user owns (prefer starter rods)
+        preferred_rod = await conn.fetchrow('''
+            SELECT r.* FROM user_rods ur
+            JOIN rods r ON ur.rod_id = r.id
+            WHERE ur.user_id = $1 AND r.rod_type = 'long'
+            ORDER BY r.is_starter DESC, r.id ASC
+            LIMIT 1
+        ''', user_id)
+        
+        if not preferred_rod:
+            # Fallback to any rod user owns
+            preferred_rod = await conn.fetchrow('''
+                SELECT r.* FROM user_rods ur
+                JOIN rods r ON ur.rod_id = r.id
+                WHERE ur.user_id = $1
+                ORDER BY r.is_starter DESC, r.id ASC
+                LIMIT 1
+            ''', user_id)
+        
+        if preferred_rod:
+            # Set as active rod
+            await conn.execute('''
+                INSERT INTO user_settings (user_id, active_rod_id, updated_at)
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) 
+                DO UPDATE SET active_rod_id = $2, updated_at = CURRENT_TIMESTAMP
+            ''', user_id, preferred_rod['id'])
+            
+            return preferred_rod
+            
+        return None

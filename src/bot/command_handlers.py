@@ -3,16 +3,17 @@ Command handlers for the fishing bot.
 Contains all Telegram bot command handlers (cast, hook, status, help, test_card).
 """
 
+import os
 import asyncio
 import logging
 from io import BytesIO
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
     get_user, create_user, get_active_position, close_position, use_bait, create_position_with_gear,
     ensure_user_has_level, give_starter_rod, get_available_ponds, get_user_rods, get_pond_by_id,
-    get_rod_by_id, get_suitable_fish, get_fish_by_id
+    get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit
 )
 from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing
 from src.bot.message_templates import (
@@ -29,11 +30,15 @@ from src.generators.fish_card_generator import generate_fish_card_from_db
 logger = logging.getLogger(__name__)
 
 async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /cast command - start animated fishing"""
+    """Handle /cast command - start animated fishing with rate limiting"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     
     try:
+        # Check rate limit
+        if not await check_rate_limit(user_id):
+            await safe_reply(update, "⏳ Слишком много запросов! Подождите немного перед следующей командой.")
+            return
         # Get or create user
         user = await get_user(user_id)
         if not user:
@@ -79,10 +84,18 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await safe_reply(update, "🎣 Что-то пошло не так с оборудованием! Попробуйте еще раз.")
             return
         
-        # Pre-select pond and rod to get actual price
+        # Use active rod instead of random selection
+        from src.database.db_manager import ensure_user_has_active_rod
+        active_rod = await ensure_user_has_active_rod(user_id)
+        
+        if not active_rod:
+            await safe_reply(update, "🎣 Не удалось найти активную удочку! Попробуйте еще раз.")
+            return
+            
+        # Pre-select pond and use active rod
         import random
         selected_pond = random.choice(available_ponds)
-        selected_rod = random.choice(user_rods)
+        selected_rod = active_rod
         pond_id = selected_pond['id']
         rod_id = selected_rod['id']
         
@@ -107,11 +120,15 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await safe_reply(update, "🎣 Что-то пошло не так! Попробуйте еще раз.")
 
 async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /hook command - pull out fish with animated sequence"""
+    """Handle /hook command - pull out fish with animated sequence and rate limiting"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     
     try:
+        # Check rate limit
+        if not await check_rate_limit(user_id):
+            await safe_reply(update, "⏳ Слишком много запросов! Подождите немного перед следующей командой.")
+            return
         # Check if user is fishing
         position = await get_active_position(user_id)
         
@@ -294,7 +311,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         start_message = f"""<b>🎣 Добро пожаловать, {username}!</b>
 
 {status_emoji} <b>Ваша статистика:</b>
-━━━━━━━━━━━━━━━━━━━━
+
 🎯 <b>Уровень:</b> {user_level}
 ⚡ <b>Опыт:</b> {experience} XP
 🪱 <b>Токены $BAIT:</b> {bait_tokens}
@@ -308,8 +325,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 • /help - Полная справка
 
 <i>Каждый заброс стоит 1 токен $BAIT!</i>"""
+
+        # Create web app button
+        webapp_url = os.environ.get('WEBAPP_URL', 'http://localhost:8000/webapp')
+        keyboard = [[
+            InlineKeyboardButton(
+                "🎮 Открыть игру", 
+                web_app=WebAppInfo(url=webapp_url)
+            )
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await safe_reply(update, start_message)
+        await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
         
     except Exception as e:
         logger.error(f"Error in start command: {e}")

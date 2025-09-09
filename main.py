@@ -4,11 +4,13 @@ Handles bot startup, configuration, and graceful shutdown.
 """
 
 import os
+import asyncio
 import logging
 from telegram.ext import Application, CommandHandler, Defaults
 
 from src.database.db_manager import init_database, close_pool
 from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command
+from src.webapp.web_server import start_web_server
 
 # Enable logging with less verbose output
 logging.basicConfig(
@@ -46,10 +48,22 @@ async def startup(application):
     """Initialize resources"""
     await init_database()
     logger.info("✅ PostgreSQL database initialized")
+    
+    # Start web server
+    port = int(os.environ.get('PORT', 8000))
+    web_runner = await start_web_server(port)
+    application.web_runner = web_runner  # Store runner for cleanup
+    logger.info(f"✅ Web server started on port {port}")
 
 async def shutdown(application):
     """Clean up resources"""
     logger.info("🧹 Cleaning up resources...")
+    
+    # Stop web server if running
+    if hasattr(application, 'web_runner') and application.web_runner:
+        await application.web_runner.cleanup()
+        logger.info("✅ Web server stopped")
+    
     await close_pool()
     logger.info("✅ Database pool closed")
     logger.info("✅ Shutdown completed")

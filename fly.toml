@@ -8,8 +8,11 @@ primary_region = "arn"
 [env]
   PYTHONUNBUFFERED = "1"
   PYTHONDONTWRITEBYTECODE = "1"
+  WEBAPP_URL = "https://fsh-tac.fly.dev/webapp"
 
 # No public networking; this is a background worker (Telegram bot)
 # Dockerfile CMD runs the bot, but we also specify a process for clarity
 [processes]
   worker = "python main.py"
+
+
