@@ -9,7 +9,7 @@ import logging
 from telegram.ext import Application, CommandHandler, Defaults
 
 from src.database.db_manager import init_database, close_pool
-from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command
+from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl
 from src.webapp.web_server import start_web_server
 
 # Enable logging with less verbose output
@@ -41,6 +41,8 @@ def create_application():
     application.add_handler(CommandHandler("test_card", test_card))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("leaderboard", leaderboard))
+    application.add_handler(CommandHandler("pnl", pnl))
     
     return application
 

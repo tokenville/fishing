@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Mock Data</title>
+    <script src="/static/js/config.js"></script>
+</head>
+<body>
+    <h1>🎣 Mock Data Debug Page</h1>
+    
+    <h2>Configuration</h2>
+    <div id="config-info"></div>
+    
+    <h2>API Test</h2>
+    <button onclick="testAPI()">Test API</button>
+    <div id="api-result"></div>
+    
+    <h2>Console Output</h2>
+    <p>Check browser console (F12) for detailed logs</p>
+
+    <script>
+        // Display configuration
+        document.getElementById('config-info').innerHTML = `
+            <p><strong>Development Mode:</strong> ${window.appConfig?.isDevelopment}</p>
+            <p><strong>API Base URL:</strong> ${window.appConfig?.API_BASE_URL}</p>
+            <p><strong>Mock Data:</strong> ${window.appConfig?.USE_MOCK_DATA}</p>
+            <p><strong>Telegram Enabled:</strong> ${window.appConfig?.TELEGRAM_ENABLED}</p>
+            <p><strong>Debug:</strong> ${window.appConfig?.DEBUG}</p>
+        `;
+        
+        console.log('🎯 Debug page loaded');
+        console.log('Config object:', window.appConfig);
+        
+        async function testAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const config = window.appConfig || {};
+                const baseUrl = config.API_BASE_URL || '';
+                const url = `${baseUrl}/api/user/123456789/stats`;
+                
+                console.log('Testing URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <h3>✅ API Response:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+                console.log('API Response:', data);
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h3>❌ API Error:</h3>
+                    <pre>${error.message}</pre>
+                `;
+                
+                console.error('API Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

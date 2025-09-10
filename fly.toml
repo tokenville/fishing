@@ -9,6 +9,9 @@ primary_region = "arn"
   PYTHONUNBUFFERED = "1"
   PYTHONDONTWRITEBYTECODE = "1"
   WEBAPP_URL = "https://fsh-tac.fly.dev/webapp"
+  BUNNYCDN_STORAGE_ZONE = "miniapps"
+  BUNNYCDN_HOSTNAME = "se.storage.bunnycdn.com"
+  BUNNYCDN_PUBLIC_URL = "https://miniapps.b-cdn.net"
 
 # No public networking; this is a background worker (Telegram bot)
 # Dockerfile CMD runs the bot, but we also specify a process for clarity

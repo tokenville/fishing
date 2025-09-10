@@ -13,7 +13,8 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, create_user, get_active_position, close_position, use_bait, create_position_with_gear,
     ensure_user_has_level, give_starter_rod, get_available_ponds, get_user_rods, get_pond_by_id,
-    get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit
+    get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit,
+    get_user_virtual_balance, get_flexible_leaderboard
 )
 from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing
 from src.bot.message_templates import (
@@ -381,3 +382,129 @@ async def test_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error in test_card command: {e}")
         await safe_reply(update, f"🎣 Ошибка генерации: {str(e)}")
+
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /leaderboard command - show top 10 players"""
+    try:
+        user_id = update.effective_user.id
+        
+        # Parse arguments for different leaderboard types
+        args = context.args
+        time_period = 'all'
+        
+        if args and len(args) > 0:
+            if args[0].lower() in ['week', 'day', 'month']:
+                time_period = args[0].lower()
+        
+        # Get leaderboard data
+        data = await get_flexible_leaderboard(
+            time_period=time_period,
+            user_id=user_id,
+            limit=10,
+            include_bottom=False  # Only show top 10 for now
+        )
+        
+        # Format title based on period
+        titles = {
+            'all': '📊 <b>Общий лидерборд</b>',
+            'week': '📊 <b>Недельный лидерборд</b>',
+            'day': '📊 <b>Дневной лидерборд</b>',
+            'month': '📊 <b>Месячный лидерборд</b>'
+        }
+        
+        message = [titles.get(time_period, '📊 <b>Лидерборд</b>')]
+        message.append('')
+        
+        # Top players
+        if data['top']:
+            message.append('<b>🏆 Топ-10 игроков:</b>')
+            for i, player in enumerate(data['top'], 1):
+                emoji = '🥇' if i == 1 else '🥈' if i == 2 else '🥉' if i == 3 else f'{i}.'
+                balance_str = f"${player['balance']:,.2f}"
+                win_rate = (player['avg_pnl'] > 0)
+                trend = '📈' if win_rate else '📉'
+                message.append(
+                    f"{emoji} <b>{player['username']}</b>: {balance_str} {trend}"
+                )
+                message.append(f"    └ {player['total_trades']} сделок, средний P&L: {player['avg_pnl']:.1f}%")
+        else:
+            message.append('Пока нет активных игроков')
+        
+        # User position
+        if data['user_position']:
+            pos = data['user_position']
+            message.append('')
+            message.append(f"<b>📍 Ваша позиция:</b>")
+            balance_color = '🟢' if pos['balance'] >= 10000 else '🔴'
+            message.append(
+                f"Место: <b>#{pos['rank']}</b> из {data['total_players']} (топ {pos['percentile']:.0f}%)"
+            )
+            message.append(
+                f"Баланс: {balance_color} <b>${pos['balance']:,.2f}</b>"
+            )
+            if pos['total_trades'] > 0:
+                message.append(
+                    f"Средний P&L: {pos['avg_pnl']:.1f}%"
+                )
+        
+        # Help text
+        message.append('')
+        message.append('<i>Используйте /leaderboard week для недельного рейтинга</i>')
+        
+        await update.message.reply_text(
+            '\n'.join(message),
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in leaderboard command: {e}")
+        await safe_reply(update, "🎣 Ошибка при загрузке лидерборда. Попробуйте позже.")
+
+async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /pnl command - show user's P&L and balance"""
+    try:
+        user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name
+        
+        # Get user balance data
+        balance_data = await get_user_virtual_balance(user_id)
+        
+        # Format message
+        message = [f"<b>💰 P&L статистика для {username}</b>", ""]
+        
+        # Balance with color indicator
+        balance = balance_data['balance']
+        balance_color = '🟢' if balance >= 10000 else '🔴'
+        profit_loss = balance - 10000
+        profit_loss_str = f"+${profit_loss:,.2f}" if profit_loss > 0 else f"-${abs(profit_loss):,.2f}"
+        
+        message.append(f"<b>Текущий баланс:</b> {balance_color} ${balance:,.2f}")
+        message.append(f"<b>Общий P&L:</b> {profit_loss_str} ({(profit_loss/10000)*100:.1f}%)")
+        message.append("")
+        
+        # Trading stats
+        if balance_data['total_trades'] > 0:
+            win_rate = (balance_data['winning_trades'] / balance_data['total_trades']) * 100
+            message.append("<b>📊 Статистика торговли:</b>")
+            message.append(f"Всего сделок: {balance_data['total_trades']}")
+            message.append(f"Прибыльных: {balance_data['winning_trades']} ({win_rate:.0f}%)")
+            message.append(f"Средний P&L: {balance_data['avg_pnl']:.2f}%")
+        else:
+            message.append("<i>У вас пока нет завершенных сделок</i>")
+            message.append("Используйте /cast чтобы начать рыбалку!")
+        
+        # Position in leaderboard
+        leaderboard_data = await get_flexible_leaderboard(user_id=user_id, limit=1)
+        if leaderboard_data['user_position']:
+            pos = leaderboard_data['user_position']
+            message.append("")
+            message.append(f"<b>🏆 Позиция в рейтинге:</b> #{pos['rank']} (топ {pos['percentile']:.0f}%)")
+        
+        await update.message.reply_text(
+            '\n'.join(message),
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in pnl command: {e}")
+        await safe_reply(update, "🎣 Ошибка при загрузке P&L. Попробуйте позже.")

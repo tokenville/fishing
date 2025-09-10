@@ -877,3 +877,183 @@ async def ensure_user_has_active_rod(user_id: int) -> Optional[asyncpg.Record]:
             return preferred_rod
             
         return None
+
+# === VIRTUAL BALANCE & LEADERBOARD FUNCTIONS ===
+
+async def get_user_virtual_balance(user_id: int) -> float:
+    """Calculate user's virtual balance based on all closed positions
+    Starting balance: $10,000
+    Each position: $1,000 stake
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow('''
+            SELECT 10000 + COALESCE(SUM(1000 * pnl_percent / 100), 0) as balance,
+                   COUNT(*) as total_trades,
+                   SUM(CASE WHEN pnl_percent > 0 THEN 1 ELSE 0 END) as winning_trades,
+                   AVG(pnl_percent) as avg_pnl
+            FROM positions 
+            WHERE user_id = $1 AND status = 'closed'
+        ''', user_id)
+        
+        if result:
+            return {
+                'balance': float(result['balance']),
+                'total_trades': result['total_trades'] or 0,
+                'winning_trades': result['winning_trades'] or 0,
+                'avg_pnl': float(result['avg_pnl']) if result['avg_pnl'] else 0
+            }
+        return {
+            'balance': 10000.0,
+            'total_trades': 0,
+            'winning_trades': 0,
+            'avg_pnl': 0
+        }
+
+async def get_flexible_leaderboard(
+    pond_id: Optional[int] = None,
+    rod_id: Optional[int] = None,
+    time_period: Optional[str] = None,  # 'day', 'week', 'month', 'all'
+    user_id: Optional[int] = None,  # for specific user position
+    limit: int = 10,
+    include_bottom: bool = True
+) -> Dict[str, Any]:
+    """
+    Universal leaderboard with multiple filters
+    
+    Returns:
+        {
+            'top': [...],
+            'bottom': [...],
+            'user_position': {...},
+            'total_players': int,
+            'filters_applied': {...}
+        }
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Build WHERE conditions
+        where_conditions = ["p.status = 'closed'"]
+        params = []
+        param_counter = 1
+        
+        if pond_id:
+            where_conditions.append(f"p.pond_id = ${param_counter}")
+            params.append(pond_id)
+            param_counter += 1
+            
+        if rod_id:
+            where_conditions.append(f"p.rod_id = ${param_counter}")
+            params.append(rod_id)
+            param_counter += 1
+        
+        # Time filters
+        if time_period and time_period != 'all':
+            time_intervals = {
+                'day': "INTERVAL '1 day'",
+                'week': "INTERVAL '7 days'",
+                'month': "INTERVAL '30 days'",
+                'year': "INTERVAL '365 days'"
+            }
+            if time_period in time_intervals:
+                where_conditions.append(
+                    f"p.exit_time >= CURRENT_TIMESTAMP - {time_intervals[time_period]}"
+                )
+        
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
+        # Main query with ranks
+        query = f'''
+            WITH user_balances AS (
+                SELECT 
+                    u.telegram_id,
+                    u.username,
+                    u.level,
+                    10000 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0) as balance,
+                    COUNT(p.id) as total_trades,
+                    AVG(p.pnl_percent) as avg_pnl,
+                    MAX(p.pnl_percent) as best_trade,
+                    MIN(p.pnl_percent) as worst_trade,
+                    MAX(p.exit_time) as last_trade_time,
+                    RANK() OVER (ORDER BY 10000 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0) DESC) as rank
+                FROM users u
+                LEFT JOIN positions p ON u.telegram_id = p.user_id AND {where_clause}
+                GROUP BY u.telegram_id, u.username, u.level
+                HAVING COUNT(p.id) > 0  -- Only active players
+            ),
+            stats AS (
+                SELECT COUNT(*) as total_players FROM user_balances
+            )
+            SELECT 
+                ub.*,
+                s.total_players
+            FROM user_balances ub
+            CROSS JOIN stats s
+            ORDER BY ub.balance DESC
+        '''
+        
+        all_results = await conn.fetch(query, *params)
+        
+        if not all_results:
+            return {
+                'top': [],
+                'bottom': [],
+                'user_position': None,
+                'total_players': 0,
+                'filters_applied': {
+                    'pond_id': pond_id,
+                    'rod_id': rod_id,
+                    'time_period': time_period
+                }
+            }
+        
+        # Process results
+        total_players = all_results[0]['total_players'] if all_results else 0
+        
+        # Top players
+        top_players = all_results[:limit]
+        
+        # Bottom players (if needed)
+        bottom_players = []
+        if include_bottom and len(all_results) > limit:
+            bottom_players = all_results[-limit:]
+            bottom_players.reverse()  # From worst to better
+        
+        # Specific user position
+        user_position = None
+        if user_id:
+            user_data = next((r for r in all_results if r['telegram_id'] == user_id), None)
+            if user_data:
+                user_position = {
+                    'rank': user_data['rank'],
+                    'balance': float(user_data['balance']),
+                    'total_trades': user_data['total_trades'],
+                    'avg_pnl': float(user_data['avg_pnl']) if user_data['avg_pnl'] else 0,
+                    'percentile': round((1 - user_data['rank'] / total_players) * 100, 1) if total_players > 0 else 100
+                }
+        
+        return {
+            'top': [dict(r) for r in top_players],
+            'bottom': [dict(r) for r in bottom_players],
+            'user_position': user_position,
+            'total_players': total_players,
+            'filters_applied': {
+                'pond_id': pond_id,
+                'rod_id': rod_id,
+                'time_period': time_period
+            }
+        }
+
+async def get_weekly_leaderboard(user_id: Optional[int] = None):
+    """Weekly leaderboard"""
+    return await get_flexible_leaderboard(
+        time_period='week',
+        user_id=user_id
+    )
+
+async def get_daily_leaderboard(user_id: Optional[int] = None):
+    """Daily leaderboard"""
+    return await get_flexible_leaderboard(
+        time_period='day',
+        user_id=user_id
+    )

@@ -1,0 +1,32 @@
+{
+  "name": "fishing-bot-webapp",
+  "version": "1.0.0",
+  "description": "Telegram Mini App for Fishing Bot - Frontend Development",
+  "main": "mock/mockServer.js",
+  "scripts": {
+    "dev": "concurrently \"npm run serve\" \"npm run open\"",
+    "serve": "node mock/mockServer.js",
+    "open": "sleep 2 && open http://localhost:3001/webapp",
+    "start": "npm run serve",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "keywords": [
+    "telegram",
+    "mini-app",
+    "webapp",
+    "fishing",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

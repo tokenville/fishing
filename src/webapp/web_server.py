@@ -16,7 +16,8 @@ import aiofiles
 from src.database.db_manager import (
     get_user, get_user_rods, get_fish_by_id,
     get_user_fish_collection, get_user_fish_history,
-    get_user_active_rod, set_user_active_rod
+    get_user_active_rod, set_user_active_rod,
+    get_user_virtual_balance, get_flexible_leaderboard
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,10 @@ class WebAppServer:
         self.app.router.add_get('/api/user/{user_id}/active-rod', self.get_user_active_rod)
         self.app.router.add_post('/api/user/{user_id}/active-rod', self.set_user_active_rod)
         self.app.router.add_get('/api/fish/{fish_id}/image', self.get_fish_image)
+        
+        # Leaderboard and balance endpoints
+        self.app.router.add_get('/api/user/{user_id}/balance', self.get_user_balance)
+        self.app.router.add_get('/api/leaderboard', self.get_leaderboard)
         
         # Health check
         self.app.router.add_get('/health', self.health_check)
@@ -411,6 +416,80 @@ class WebAppServer:
             'timestamp': datetime.utcnow().isoformat(),
             'service': 'fishing-bot-webapp'
         })
+    
+    async def get_user_balance(self, request):
+        """Get user's virtual balance and P&L stats"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            balance_data = await get_user_virtual_balance(user_id)
+            
+            # Calculate P&L from starting balance
+            profit_loss = balance_data['balance'] - 10000
+            
+            return web.json_response({
+                'balance': balance_data['balance'],
+                'profit_loss': profit_loss,
+                'profit_loss_percent': (profit_loss / 10000) * 100,
+                'total_trades': balance_data['total_trades'],
+                'winning_trades': balance_data['winning_trades'],
+                'win_rate': (balance_data['winning_trades'] / balance_data['total_trades'] * 100) if balance_data['total_trades'] > 0 else 0,
+                'avg_pnl': balance_data['avg_pnl']
+            })
+        except ValueError:
+            return web.json_response({'error': 'Invalid user ID'}, status=400)
+        except Exception as e:
+            logger.error(f"Error getting user balance: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def get_leaderboard(self, request):
+        """Get leaderboard data with optional filters"""
+        try:
+            # Parse query parameters
+            params = request.rel_url.query
+            
+            leaderboard_data = await get_flexible_leaderboard(
+                pond_id=int(params.get('pond_id')) if params.get('pond_id') else None,
+                rod_id=int(params.get('rod_id')) if params.get('rod_id') else None,
+                time_period=params.get('type', 'all'),
+                user_id=int(params.get('user_id')) if params.get('user_id') else None,
+                limit=int(params.get('limit', 10)),
+                include_bottom=params.get('include_bottom', 'true').lower() == 'true'
+            )
+            
+            # Format response for frontend
+            return web.json_response({
+                'top': [
+                    {
+                        'user_id': player['telegram_id'],
+                        'username': player['username'],
+                        'level': player['level'],
+                        'balance': float(player['balance']),
+                        'total_trades': player['total_trades'],
+                        'avg_pnl': float(player['avg_pnl']) if player['avg_pnl'] else 0,
+                        'best_trade': float(player['best_trade']) if player['best_trade'] else 0,
+                        'worst_trade': float(player['worst_trade']) if player['worst_trade'] else 0,
+                        'rank': player.get('rank', i+1)
+                    }
+                    for i, player in enumerate(leaderboard_data['top'])
+                ],
+                'bottom': [
+                    {
+                        'user_id': player['telegram_id'],
+                        'username': player['username'],
+                        'level': player['level'],
+                        'balance': float(player['balance']),
+                        'total_trades': player['total_trades'],
+                        'avg_pnl': float(player['avg_pnl']) if player['avg_pnl'] else 0
+                    }
+                    for player in leaderboard_data['bottom']
+                ],
+                'user_position': leaderboard_data['user_position'],
+                'total_players': leaderboard_data['total_players'],
+                'filters': leaderboard_data['filters_applied']
+            })
+        except Exception as e:
+            logger.error(f"Error getting leaderboard: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
 
 # Global server instance
 web_server = WebAppServer()

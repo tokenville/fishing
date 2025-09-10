@@ -272,6 +272,46 @@ body::after {
     display: inline-block;
 }
 
+/* Player Balance Display */
+.player-balance {
+    margin-top: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    border: 2px solid #333;
+    border-radius: 20px;
+    box-shadow: 
+        0 2px 0 #000,
+        0 4px 8px rgba(0,0,0,0.3);
+    display: inline-block;
+}
+
+.balance-label {
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-size: 14px;
+    color: #333;
+    margin-right: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.balance-value {
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-size: 20px;
+    font-weight: 700;
+    color: #000;
+    text-shadow: 
+        1px 1px 0 #fff,
+        2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.balance-value.positive {
+    color: #006400;
+}
+
+.balance-value.negative {
+    color: #8B0000;
+}
+
 /* === BOTTOM MENU === */
 .bottom-menu {
     position: fixed;

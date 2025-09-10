@@ -147,12 +147,14 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 
 ### Game Mechanics:
 - **8 Trading Pairs**: ETH, BTC, SOL, ADA, MATIC, AVAX, LINK, DOT (all vs USDT)
+- **Virtual Balance System**: $10,000 starting balance, $1,000 stake per cast
 - **Rod System**: Long/Short trading rods with positive/negative leverage (2.0x to 6x range)
 - **Active Rod Selection**: Players choose their preferred rod for all fishing operations
 - **Character Visualization**: Active rod appears in player's hands on Mini App lobby screen
 - **87 Fish Types**: Absurd fish with trash aesthetics, crypto memes, and unexpected personalities
 - **Special Fish**: Crypto-themed fish like NFT-Обезьяна, Скам-Лягушка, Деген-Русалка
 - **Level System**: Unlock new ponds as players progress
+- **Leaderboard System**: Global, weekly, and daily rankings by virtual balance
 - **Smart Matching**: Fish selection algorithm considers all conditions for realistic catches
 
 ## Bot Commands
@@ -161,6 +163,9 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 - `/cast` - Start animated fishing sequence using player's active selected rod (costs 1 BAIT token)
 - `/hook` - Catch fish using new database-driven system with personalized stories
 - `/status` - Check active position with multi-currency P&L updates
+- `/pnl` - Show virtual balance, P&L statistics, and leaderboard position
+- `/leaderboard` - Display top 10 players by virtual balance with trading stats
+- `/leaderboard week` - Weekly leaderboard rankings
 - `/help` - Show dynamic game rules generated from database (always up-to-date)
 - `/test_card` - Generate test fish cards (development only)
 
@@ -445,6 +450,7 @@ The bot now uses HTML parse mode by default for rich text formatting:
 
 ### Telegram Mini App Features
 - **RPG-Style Lobby**: Player avatar with animated border and comprehensive stats display
+- **Virtual Balance Display**: Real-time balance with profit/loss color indicators
 - **Character Rod Visualization**: Active rod dynamically appears in player's hands on lobby screen
 - **Rod Selection Interface**: Choose between Long/Short trading rods with visual indicators
 - **Fish Collection**: Grid view of all caught fish with rarity badges and best P&L indicators
@@ -483,6 +489,8 @@ python3 migrate_images_to_cdn.py
 - `/api/user/{user_id}/fish` → Full fish collection with trading history
 - `/api/user/{user_id}/rods` → User's rod collection
 - `/api/user/{user_id}/active-rod` → Get/Set user's active rod selection (GET/POST)
+- `/api/user/{user_id}/balance` → Virtual balance and P&L statistics
+- `/api/leaderboard` → Flexible leaderboard with query parameters (type, pond_id, rod_id, user_id)
 - `/api/fish/{fish_id}/image?size=thumbnail` → Optimized 200px image
 - `/api/fish/{fish_id}/image?size=medium` → Optimized 400px image  
 - `/api/fish/{fish_id}/image?size=full` → Optimized 800px image

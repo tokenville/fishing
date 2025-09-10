@@ -1,5 +1,6 @@
 // === TELEGRAM WEB APP INITIALIZATION ===
-const tg = window.Telegram?.WebApp;
+const appConfig = window.appConfig || {};
+const tg = appConfig.TELEGRAM_ENABLED ? window.Telegram?.WebApp : null;
 
 // Инициализация Telegram Web App
 if (tg) {
@@ -13,6 +14,12 @@ if (tg) {
     tg.enableClosingConfirmation();
 }
 
+// Log mode in development
+if (appConfig.DEBUG) {
+    console.log('🎣 WebApp running in', appConfig.isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION', 'mode');
+    console.log('API URL:', appConfig.API_BASE_URL || 'default');
+}
+
 // === GLOBAL STATE ===
 let currentScreen = 'lobby';
 let userData = null;
@@ -21,21 +28,22 @@ let userRods = [];
 let fishHistory = {};
 let activeRod = null;
 let currentRodIndex = 0;
+let userBalance = null;
 
 // === UTILITY FUNCTIONS ===
 function getUserIdFromTelegram() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         return tg.initDataUnsafe.user.id;
     }
-    // Fallback для тестирования
-    return 123456789;
+    // Fallback для тестирования и разработки
+    return appConfig.DEFAULT_USER_ID || 123456789;
 }
 
 function getUsernameFromTelegram() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         return tg.initDataUnsafe.user.username || tg.initDataUnsafe.user.first_name;
     }
-    return 'Рыбак';
+    return appConfig.DEFAULT_USERNAME || 'Рыбак';
 }
 
 // === API FUNCTIONS ===
@@ -48,7 +56,15 @@ async function apiRequest(endpoint, options = {}) {
             }
         };
         
-        const response = await fetch(`/api${endpoint}`, {
+        // Use base URL from config
+        const baseUrl = appConfig.API_BASE_URL || '';
+        const url = `${baseUrl}/api${endpoint}`;
+        
+        if (appConfig.DEBUG) {
+            console.log('API Request:', options.method || 'GET', url);
+        }
+        
+        const response = await fetch(url, {
             ...defaultOptions,
             ...options
         });
@@ -57,7 +73,13 @@ async function apiRequest(endpoint, options = {}) {
             throw new Error(`API Error: ${response.status}`);
         }
         
-        return await response.json();
+        const data = await response.json();
+        
+        if (appConfig.DEBUG) {
+            console.log('API Response:', data);
+        }
+        
+        return data;
     } catch (error) {
         console.error('API Request failed:', error);
         throw error;
@@ -69,9 +91,21 @@ async function loadUserData() {
         const userId = getUserIdFromTelegram();
         userData = await apiRequest(`/user/${userId}/stats`);
         updatePlayerStats();
+        // Load balance data
+        await loadUserBalance();
     } catch (error) {
         console.error('Failed to load user data:', error);
         showError('Не удалось загрузить данные пользователя');
+    }
+}
+
+async function loadUserBalance() {
+    try {
+        const userId = getUserIdFromTelegram();
+        userBalance = await apiRequest(`/user/${userId}/balance`);
+        updateBalanceDisplay();
+    } catch (error) {
+        console.error('Failed to load user balance:', error);
     }
 }
 
@@ -192,6 +226,31 @@ function updatePlayerStats() {
     
     const rodsCountElement = document.getElementById('rods-count');
     if (rodsCountElement) rodsCountElement.textContent = userData.rods_count || 0;
+}
+
+function updateBalanceDisplay() {
+    if (!userBalance) return;
+    
+    const balanceElement = document.getElementById('balance-value');
+    if (balanceElement) {
+        const balance = userBalance.balance || 10000;
+        const formatted = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(balance);
+        
+        balanceElement.textContent = formatted;
+        
+        // Add color class based on profit/loss
+        balanceElement.classList.remove('positive', 'negative');
+        if (balance > 10000) {
+            balanceElement.classList.add('positive');
+        } else if (balance < 10000) {
+            balanceElement.classList.add('negative');
+        }
+    }
 }
 
 function updateFishCount() {
@@ -375,7 +434,8 @@ function createMainRodDisplay(rod) {
     
     // Пытаемся использовать SVG изображение, иначе эмодзи
     const rodType = rod.rod_type === 'long' ? 'long' : 'short';
-    const rodImageSrc = `/static/images/${rodType}-rod.svg`;
+    const baseUrl = appConfig.API_BASE_URL || '';
+    const rodImageSrc = `${baseUrl}/static/images/${rodType}-rod.svg`;
     
     return `
         <div class="main-rod-icon">
@@ -515,7 +575,8 @@ function updateCharacterVisual() {
         
         // Use rod_type as fallback (long/short)
         const rodType = activeRod.rod_type === 'long' ? 'long' : 'short';
-        rodImg.src = `/static/images/${rodType}-rod.svg`;
+        const baseUrl = appConfig.API_BASE_URL || '';
+        rodImg.src = `${baseUrl}/static/images/${rodType}-rod.svg`;
         rodImg.alt = activeRod.name;
         rodImg.className = `${rodType}-rod`;
         
@@ -699,8 +760,12 @@ function castInTelegram() {
         // Закрываем WebApp
         tg.close();
     } else {
-        // Fallback для тестирования
-        alert('В реальном приложении откроется чат с ботом для рыбалки!');
+        // Fallback для тестирования в development mode
+        if (appConfig.isDevelopment) {
+            showMessage('🎣 В реальном приложении откроется чат с ботом для рыбалки!', 3000);
+        } else {
+            alert('В реальном приложении откроется чат с ботом для рыбалки!');
+        }
     }
 }
 
@@ -771,6 +836,9 @@ function showError(message) {
     
     if (tg) {
         tg.showAlert(message);
+    } else if (appConfig.isDevelopment) {
+        // In development, show a nicer error message
+        showMessage(`❌ ${message}`, 3000);
     } else {
         alert(message);
     }
