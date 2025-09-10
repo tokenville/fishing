@@ -6,10 +6,11 @@ Handles bot startup, configuration, and graceful shutdown.
 import os
 import asyncio
 import logging
-from telegram.ext import Application, CommandHandler, Defaults
+from telegram.ext import Application, CommandHandler, ChatMemberHandler, CallbackQueryHandler, Defaults
 
 from src.database.db_manager import init_database, close_pool
-from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl
+from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, pond_selection_callback
+from src.bot.group_handlers import my_chat_member_handler, chat_member_handler
 from src.webapp.web_server import start_web_server
 
 # Enable logging with less verbose output
@@ -43,6 +44,13 @@ def create_application():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("leaderboard", leaderboard))
     application.add_handler(CommandHandler("pnl", pnl))
+    
+    # Add group management handlers
+    application.add_handler(ChatMemberHandler(my_chat_member_handler, ChatMemberHandler.MY_CHAT_MEMBER))
+    application.add_handler(ChatMemberHandler(chat_member_handler, ChatMemberHandler.CHAT_MEMBER))
+    
+    # Add callback handlers
+    application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
     
     return application
 

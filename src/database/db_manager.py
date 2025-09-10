@@ -125,7 +125,7 @@ async def init_database():
             )
         ''')
         
-        # Create ponds table
+        # Create ponds table (enhanced for group support)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS ponds (
                 id SERIAL PRIMARY KEY,
@@ -136,8 +136,21 @@ async def init_database():
                 image_url TEXT,
                 required_level INTEGER DEFAULT 1,
                 is_active BOOLEAN DEFAULT true,
+                chat_id BIGINT, 
+                chat_type TEXT,
+                member_count INTEGER DEFAULT 0,
+                pond_type TEXT DEFAULT 'static',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ''')
+        
+        # Add new columns for group support if they don't exist (migration)
+        await conn.execute('''
+            ALTER TABLE ponds 
+            ADD COLUMN IF NOT EXISTS chat_id BIGINT,
+            ADD COLUMN IF NOT EXISTS chat_type TEXT,
+            ADD COLUMN IF NOT EXISTS member_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS pond_type TEXT DEFAULT 'static'
         ''')
         
         # Create rods table
@@ -247,6 +260,19 @@ async def init_database():
         await conn.execute('''
             ALTER TABLE fish_images 
             ADD COLUMN IF NOT EXISTS cdn_url TEXT
+        ''')
+        
+        # Create group_memberships table for tracking user access to group ponds
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS group_memberships (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                chat_id BIGINT,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT true,
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                UNIQUE(user_id, chat_id)
+            )
         ''')
         
         # Insert default data
@@ -1057,3 +1083,148 @@ async def get_daily_leaderboard(user_id: Optional[int] = None):
         time_period='day',
         user_id=user_id
     )
+
+# === GROUP POND MANAGEMENT ===
+
+def get_pond_name_and_type(group_name: str, member_count: int) -> tuple:
+    """Generate pond name and available trading pair count based on group size"""
+    if member_count <= 5:
+        return f"🏞️ Creek {group_name}", 1  # 1 trading pair
+    elif member_count <= 15:
+        return f"🌊 Pond {group_name}", 2    # 2 trading pairs
+    elif member_count <= 30:
+        return f"💧 Lake {group_name}", 3   # 3 trading pairs
+    elif member_count <= 60:
+        return f"🌊 River {group_name}", 4    # 4 trading pairs
+    elif member_count <= 100:
+        return f"⛵ Sea {group_name}", 6    # 6 trading pairs
+    else:
+        return f"🌊 Ocean {group_name}", 8   # 8 trading pairs
+
+def get_available_trading_pairs(pair_count: int) -> List[tuple]:
+    """Get available trading pairs based on pond size"""
+    all_pairs = [
+        ('ETH/USDT', 'ETH', 'USDT'),
+        ('BTC/USDT', 'BTC', 'USDT'),
+        ('SOL/USDT', 'SOL', 'USDT'),
+        ('ADA/USDT', 'ADA', 'USDT'),
+        ('MATIC/USDT', 'MATIC', 'USDT'),
+        ('AVAX/USDT', 'AVAX', 'USDT'),
+        ('LINK/USDT', 'LINK', 'USDT'),
+        ('DOT/USDT', 'DOT', 'USDT')
+    ]
+    return all_pairs[:pair_count]
+
+async def create_or_update_group_pond(chat_id: int, chat_title: str, chat_type: str, member_count: int):
+    """Create or update a group pond based on current group stats"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Generate pond name and get trading pairs
+        pond_name, pair_count = get_pond_name_and_type(chat_title, member_count)
+        trading_pairs = get_available_trading_pairs(pair_count)
+        
+        # Check if group pond already exists
+        existing_pond = await conn.fetchrow(
+            'SELECT * FROM ponds WHERE chat_id = $1 AND pond_type = $2',
+            chat_id, 'group'
+        )
+        
+        if existing_pond:
+            # Update existing pond
+            await conn.execute('''
+                UPDATE ponds 
+                SET name = $1, member_count = $2, is_active = true
+                WHERE chat_id = $3 AND pond_type = 'group'
+            ''', pond_name, member_count, chat_id)
+            
+            logger.info(f"Updated group pond: {pond_name} ({member_count} members)")
+            return existing_pond['id']
+        else:
+            # Create new pond with primary trading pair (first one)
+            primary_pair = trading_pairs[0] if trading_pairs else ('ETH/USDT', 'ETH', 'USDT')
+            
+            result = await conn.fetchrow('''
+                INSERT INTO ponds (name, trading_pair, base_currency, quote_currency, 
+                                 required_level, is_active, chat_id, chat_type, member_count, pond_type)
+                VALUES ($1, $2, $3, $4, 1, true, $5, $6, $7, 'group')
+                RETURNING id
+            ''', pond_name, primary_pair[0], primary_pair[1], primary_pair[2], 
+                 chat_id, chat_type, member_count)
+            
+            logger.info(f"Created new group pond: {pond_name} ({member_count} members)")
+            return result['id']
+
+async def deactivate_group_pond(chat_id: int):
+    """Deactivate group pond when bot is removed from group"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE ponds 
+            SET is_active = false
+            WHERE chat_id = $1 AND pond_type = 'group'
+        ''', chat_id)
+        logger.info(f"Deactivated group pond for chat {chat_id}")
+
+async def add_user_to_group(user_id: int, chat_id: int):
+    """Add user to group membership"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO group_memberships (user_id, chat_id, is_active)
+            VALUES ($1, $2, true)
+            ON CONFLICT (user_id, chat_id) 
+            DO UPDATE SET is_active = true, joined_at = CURRENT_TIMESTAMP
+        ''', user_id, chat_id)
+
+async def remove_user_from_group(user_id: int, chat_id: int):
+    """Remove user from group membership"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE group_memberships 
+            SET is_active = false
+            WHERE user_id = $1 AND chat_id = $2
+        ''', user_id, chat_id)
+
+async def get_user_group_ponds(user_id: int) -> List[asyncpg.Record]:
+    """Get all active group ponds that user has access to"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
+            SELECT p.* FROM ponds p
+            JOIN group_memberships gm ON p.chat_id = gm.chat_id
+            WHERE gm.user_id = $1 AND gm.is_active = true 
+            AND p.is_active = true AND p.pond_type = 'group'
+            ORDER BY p.member_count DESC, p.name
+        ''', user_id)
+
+async def get_group_pond_by_chat_id(chat_id: int) -> Optional[asyncpg.Record]:
+    """Get group pond by chat ID"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT * FROM ponds 
+            WHERE chat_id = $1 AND pond_type = 'group' AND is_active = true
+        ''', chat_id)
+
+async def update_group_member_count(chat_id: int, member_count: int):
+    """Update member count for a group pond"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Get current pond info
+        pond = await conn.fetchrow('''
+            SELECT * FROM ponds WHERE chat_id = $1 AND pond_type = 'group'
+        ''', chat_id)
+        
+        if pond:
+            # Generate new name based on updated member count
+            chat_title = pond['name'].split(' ', 2)[-1]  # Extract original group name
+            new_name, _ = get_pond_name_and_type(chat_title, member_count)
+            
+            await conn.execute('''
+                UPDATE ponds 
+                SET name = $1, member_count = $2
+                WHERE chat_id = $3 AND pond_type = 'group'
+            ''', new_name, member_count, chat_id)
+            
+            logger.info(f"Updated group pond member count: {new_name} ({member_count} members)")

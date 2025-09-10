@@ -7,14 +7,15 @@ import os
 import asyncio
 import logging
 from io import BytesIO
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Chat
+from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from src.database.db_manager import (
     get_user, create_user, get_active_position, close_position, use_bait, create_position_with_gear,
     ensure_user_has_level, give_starter_rod, get_available_ponds, get_user_rods, get_pond_by_id,
     get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit,
-    get_user_virtual_balance, get_flexible_leaderboard
+    get_user_virtual_balance, get_flexible_leaderboard,
+    get_group_pond_by_chat_id, get_user_group_ponds, add_user_to_group
 )
 from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing, get_fishing_time_seconds
 from src.bot.message_templates import (
@@ -31,15 +32,17 @@ from src.generators.fish_card_generator import generate_fish_card_from_db
 logger = logging.getLogger(__name__)
 
 async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /cast command - start animated fishing with rate limiting"""
+    """Handle /cast command - start fishing in group or private chat with pond selection"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    chat = update.effective_chat
     
     try:
         # Check rate limit
         if not await check_rate_limit(user_id):
             await safe_reply(update, "⏳ Too many requests! Wait a bit before the next command.")
             return
+            
         # Get or create user
         user = await get_user(user_id)
         if not user:
@@ -62,59 +65,102 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await safe_reply(update, f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress.")
             return
         
-        # Use bait and get current price
-        if not await use_bait(user_id):
-            await safe_reply(update, "🎣 Failed to use bait. Try again!")
+        # GROUP CHAT LOGIC: Direct fishing in the current group
+        if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+            # Add user to group membership if not already added
+            await add_user_to_group(user_id, chat.id)
+            
+            # Get or create group pond
+            group_pond = await get_group_pond_by_chat_id(chat.id)
+            if not group_pond:
+                await safe_reply(update, "❌ This group doesn't have a pond yet! The bot needs to be properly added to the group.")
+                return
+            
+            # Use bait
+            if not await use_bait(user_id):
+                await safe_reply(update, "🎣 Failed to use bait. Try again!")
+                return
+            
+            # Get user's active rod
+            from src.database.db_manager import ensure_user_has_active_rod
+            active_rod = await ensure_user_has_active_rod(user_id)
+            
+            if not active_rod:
+                await safe_reply(update, "🎣 Failed to find active fishing rod! Try again.")
+                return
+            
+            # Get current price and create position
+            base_currency = group_pond['base_currency']
+            current_price = await get_crypto_price(base_currency)
+            
+            # Create position IMMEDIATELY at market price
+            await create_position_with_gear(user_id, group_pond['id'], active_rod['id'], current_price)
+            
+            # Send group cast message
+            await safe_reply(update, 
+                f"🎣 <b>{username}</b> cast their rod into <b>{group_pond['name']}</b>!\n\n"
+                f"🌊 <b>Pond:</b> {group_pond['name']}\n"
+                f"🎣 <b>Rod:</b> {active_rod['name']}\n"
+                f"💰 <b>Entry Price:</b> ${current_price:,.4f}\n\n"
+                f"<i>Use /hook when you're ready to catch the fish!</i>"
+            )
+            
+            logger.info(f"User {username} cast in group {chat.id} ({group_pond['name']})")
             return
         
-        user_level = user['level'] if user else 1
+        # PRIVATE CHAT LOGIC: Show pond selection interface
+        # Get user's available group ponds
+        user_group_ponds = await get_user_group_ponds(user_id)
         
-        # Get pond and price before animation to show correct starting position
-        available_ponds = await get_available_ponds(user_level)
-        user_rods = await get_user_rods(user_id)
-        
-        # Fallback logic for starter equipment
-        if not user_rods:
-            await give_starter_rod(user_id)
-            user_rods = await get_user_rods(user_id)
+        if not user_group_ponds:
+            # User has no group ponds available
+            no_ponds_msg = f"""🎣 <b>No fishing ponds available!</b>
+
+<b>🌊 To start fishing, you need to:</b>
+
+1. Add this bot to a Telegram group
+2. The group will automatically become a fishing pond for you and others
+3. Then you can /cast here or right in the group
+
+<b>🎮 Group Pond Benefits:</b>
+• Bigger groups = More trading pairs
+• Fish with friends socially
+• Group announcements when you catch fish
+• Group specific leaderboards and events
+
+<i>Add me to a group to create your first pond!</i>"""
             
-        if not available_ponds:
-            available_ponds = await get_available_ponds(1)  # Force starter pond access
-            
-        if not available_ponds or not user_rods:
-            await safe_reply(update, "🎣 Something went wrong with equipment! Try again.")
+            await safe_reply(update, no_ponds_msg)
             return
         
-        # Use active rod instead of random selection
-        from src.database.db_manager import ensure_user_has_active_rod
-        active_rod = await ensure_user_has_active_rod(user_id)
-        
-        if not active_rod:
-            await safe_reply(update, "🎣 Failed to find active fishing rod! Try again.")
-            return
+        # Show pond selection buttons
+        keyboard = []
+        for pond in user_group_ponds[:10]:  # Limit to 10 ponds to avoid button limit
+            pond_name = pond['name']
+            member_info = f"({pond['member_count']} members)" if pond.get('member_count') else ""
+            button_text = f"{pond_name} {member_info}"[:64]  # Telegram button text limit
             
-        # Pre-select pond and use active rod
-        import random
-        selected_pond = random.choice(available_ponds)
-        selected_rod = active_rod
-        pond_id = selected_pond['id']
-        rod_id = selected_rod['id']
+            keyboard.append([
+                InlineKeyboardButton(
+                    button_text,
+                    callback_data=f"select_pond_{pond['id']}"
+                )
+            ])
         
-        # Get actual crypto price before animation
-        pond = await get_pond_by_id(pond_id)
-        base_currency = pond['base_currency'] if pond else 'ETH'
-        current_price = await get_crypto_price(base_currency)
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Create position IMMEDIATELY at market price (before animation)
-        await create_position_with_gear(user_id, pond_id, rod_id, current_price)
+        selection_msg = f"""🎣 <b>Choose Your Fishing Pond</b>
+
+<b>🌊 Available Ponds:</b>
+You have access to {len(user_group_ponds)} pond(s) from your group memberships.
+
+<i>Select a pond below to cast your fishing rod:</i>"""
         
-        # Enhanced social casting animation with real price (for UX only)
-        result = await animate_casting_sequence(
-            update.message, username, user_level, current_price, pond_id, rod_id
+        await update.message.reply_text(
+            selection_msg,
+            reply_markup=reply_markup,
+            parse_mode='HTML'
         )
-        
-        # Log the cast action
-        logger.info(f"User {username} cast with pond {pond_id}, rod {rod_id}, entry price {current_price}")
         
     except Exception as e:
         logger.error(f"Error in cast command: {e}")
@@ -221,6 +267,21 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 card_image,
                 complete_story
             )
+            
+            # Send group notification if this was a group pond
+            if pond and pond.get('pond_type') == 'group' and pond.get('chat_id') and update.effective_chat.type == Chat.PRIVATE:
+                try:
+                    # Send notification to the group
+                    pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
+                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%"
+                    
+                    await context.bot.send_message(
+                        chat_id=pond['chat_id'],
+                        text=group_notification,
+                        parse_mode='HTML'
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not send group hook notification: {e}")
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete
@@ -518,3 +579,77 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error in pnl command: {e}")
         await safe_reply(update, "🎣 Error loading P&L. Try later.")
+
+async def pond_selection_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle pond selection callback from private chat"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name
+        
+        # Parse callback data: "select_pond_<pond_id>"
+        if not query.data.startswith("select_pond_"):
+            return
+            
+        pond_id = int(query.data.split("_")[-1])
+        
+        # Get pond info
+        pond = await get_pond_by_id(pond_id)
+        if not pond:
+            await query.edit_message_text("❌ Pond not found!")
+            return
+        
+        # Check if user has active position
+        active_position = await get_active_position(user_id)
+        if active_position:
+            await query.edit_message_text(f"🎣 You already have a fishing rod in the water! Use /hook to pull out the catch.")
+            return
+        
+        # Use bait
+        if not await use_bait(user_id):
+            await query.edit_message_text("🎣 No $BAIT tokens! Need more worms for fishing 🪱")
+            return
+        
+        # Get user's active rod
+        from src.database.db_manager import ensure_user_has_active_rod
+        active_rod = await ensure_user_has_active_rod(user_id)
+        
+        if not active_rod:
+            await query.edit_message_text("🎣 Failed to find active fishing rod! Try again.")
+            return
+        
+        # Get current price and create position
+        base_currency = pond['base_currency']
+        current_price = await get_crypto_price(base_currency)
+        
+        # Create position
+        await create_position_with_gear(user_id, pond_id, active_rod['id'], current_price)
+        
+        # Send confirmation message
+        await query.edit_message_text(
+            f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>!\n\n"
+            f"🌊 <b>Pond:</b> {pond['name']}\n"
+            f"🎣 <b>Rod:</b> {active_rod['name']}\n"
+            f"💰 <b>Entry Price:</b> ${current_price:,.4f}\n\n"
+            f"<i>Use /hook when you're ready to catch the fish!</i>"
+        )
+        
+        # If pond is a group pond, send notification to the group
+        if pond.get('pond_type') == 'group' and pond.get('chat_id'):
+            try:
+                from src.bot.group_handlers import group_cast_message
+                # Create a fake update object for the group message
+                group_message = await context.bot.send_message(
+                    chat_id=pond['chat_id'],
+                    text=f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b> from private chat!",
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.warning(f"Could not send group notification: {e}")
+        
+    except Exception as e:
+        logger.error(f"Error in pond selection callback: {e}")
+        if update.callback_query:
+            await update.callback_query.edit_message_text("🎣 Error selecting pond! Try again.")
