@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>🎣 Рыбалка - Мини Игра</title>
+    <title>🎣 Fishing - Mini Game</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="/static/css/game.css">
     <link rel="stylesheet" href="/static/css/skeleton.css">
@@ -11,17 +11,17 @@
 </head>
 <body>
     <div id="app">
-        <!-- Лобби / Главный экран -->
+        <!-- Lobby / Main screen -->
         <div id="lobby-screen" class="screen active">
-            <!-- Персонаж во весь экран -->
+            <!-- Full-screen character -->
             <div class="game-character">
-                <img src="/static/images/fisherman.svg" alt="Рыбак" class="fisherman-full">
+                <img src="/static/images/fisherman.svg" alt="Fisherman" class="fisherman-full">
                 <div class="character-rod" id="character-rod">
-                    <!-- Удочка будет добавлена динамически -->
+                    <!-- Rod will be added dynamically -->
                 </div>
             </div>
             
-            <!-- Статы вокруг персонажа -->
+            <!-- Stats around character -->
             <div class="character-stats">
                 <div class="stat-left">
                     <div class="stat-display">
@@ -32,7 +32,7 @@
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <span class="stat-label">Уровень</span>
+                            <span class="stat-label">Level</span>
                             <span class="stat-value" id="player-level">-</span>
                         </div>
                     </div>
@@ -48,14 +48,14 @@
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <span class="stat-label">Наживка</span>
+                            <span class="stat-label">Bait</span>
                             <span class="stat-value" id="player-bait">-</span>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Инвентарь вокруг персонажа -->
+            <!-- Inventory around character -->
             <div class="character-inventory">
                 <div class="stat-left">
                     <button class="stat-display" id="rods-btn">
@@ -68,7 +68,7 @@
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <span class="stat-label">Удочки</span>
+                            <span class="stat-label">Rods</span>
                             <span class="stat-value" id="rods-count">-</span>
                         </div>
                     </button>
@@ -84,23 +84,23 @@
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <span class="stat-label">Рыбы</span>
+                            <span class="stat-label">Fish</span>
                             <span class="stat-value" id="fish-count">-</span>
                         </div>
                     </button>
                 </div>
             </div>
             
-            <!-- Имя игрока сверху -->
+            <!-- Player name at top -->
             <div class="player-name-top">
-                <h2 id="player-name">Загрузка...</h2>
+                <h2 id="player-name">Loading...</h2>
                 <div class="player-balance" id="player-balance">
                     <span class="balance-label">Balance:</span>
                     <span class="balance-value" id="balance-value">$-</span>
                 </div>
             </div>
 
-            <!-- Нижнее меню -->
+            <!-- Bottom menu -->
             <div class="bottom-menu">
                 <div class="waves-container">
                     <svg class="wave-svg" viewBox="0 0 100 25" preserveAspectRatio="none">
@@ -114,67 +114,67 @@
                     </svg> -->
                 </div>
                 <button class="bottom-menu-btn main-action" id="cast-btn">
-                    <span class="menu-label">Забросить</span>
+                    <span class="menu-label">Cast</span>
                 </button>
             </div>
         </div>
 
-        <!-- Экран коллекции рыб -->
+        <!-- Fish collection screen -->
         <div id="collection-screen" class="screen">
             <div class="screen-header">
                 <button class="back-btn" id="collection-back-btn">←</button>
-                <h2>🐟 Коллекция рыб</h2>
+                <h2>🐟 Fish Collection</h2>
             </div>
             
             <div class="fish-grid" id="fish-grid">
-                <!-- Рыбы будут загружаться динамически -->
+                <!-- Fish will be loaded dynamically -->
             </div>
         </div>
 
-        <!-- Экран удочек -->
+        <!-- Rods screen -->
         <div id="rods-screen" class="screen">
             <div class="screen-header">
                 <button class="back-btn" id="rods-back-btn">←</button>
-                <h2>🎣 Выбор удочки</h2>
+                <h2>🎣 Rod Selection</h2>
             </div>
             
             <!-- Главная удочка в центре -->
             <div class="rod-selector-container">
                 <div class="rod-carousel">
-                    <!-- Стрелки навигации -->
+                    <!-- Navigation arrows -->
                     <button class="carousel-arrow carousel-arrow-left" id="prev-rod-btn">
                         ‹
                     </button>
                     
-                    <!-- Основная удочка -->
+                    <!-- Main rod -->
                     <div class="main-rod-display" id="main-rod-display">
-                        <!-- Удочка будет загружаться динамически -->
+                        <!-- Rod will be loaded dynamically -->
                     </div>
                     
-                    <!-- Стрелка вправо -->
+                    <!-- Right arrow -->
                     <button class="carousel-arrow carousel-arrow-right" id="next-rod-btn">
                         ›
                     </button>
                 </div>
                 
-                <!-- Индикаторы carousel -->
+                <!-- Carousel indicators -->
                 <div class="carousel-indicators" id="carousel-indicators">
-                    <!-- Точки будут генерироваться динамически -->
+                    <!-- Dots will be generated dynamically -->
                 </div>
                 
-                <!-- Кнопка выбора/статус -->
+                <!-- Selection button/status -->
                 <div class="rod-action-container">
                     <button class="rod-action-btn" id="rod-action-btn">
-                        <!-- Текст кнопки будет меняться динамически -->
+                        <!-- Button text will change dynamically -->
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Модальное окно с деталями рыбы -->
+        <!-- Fish details modal -->
         <div id="fish-modal" class="modal">
             <div class="modal-content" id="fish-details">
-                <!-- Детали рыбы будут загружаться динамически -->
+                <!-- Fish details will be loaded dynamically -->
             </div>
         </div>
     </div>

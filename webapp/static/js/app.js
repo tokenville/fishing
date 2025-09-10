@@ -2,15 +2,15 @@
 const appConfig = window.appConfig || {};
 const tg = appConfig.TELEGRAM_ENABLED ? window.Telegram?.WebApp : null;
 
-// Инициализация Telegram Web App
+// Initialize Telegram Web App
 if (tg) {
     tg.ready();
     tg.expand();
     
-    // Скрыть главную кнопку по умолчанию
+    // Hide main button by default
     tg.MainButton.hide();
     
-    // Включить подтверждение закрытия
+    // Enable closing confirmation
     tg.enableClosingConfirmation();
 }
 
@@ -35,7 +35,7 @@ function getUserIdFromTelegram() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         return tg.initDataUnsafe.user.id;
     }
-    // Fallback для тестирования и разработки
+    // Fallback for testing and development
     return appConfig.DEFAULT_USER_ID || 123456789;
 }
 
@@ -43,7 +43,7 @@ function getUsernameFromTelegram() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         return tg.initDataUnsafe.user.username || tg.initDataUnsafe.user.first_name;
     }
-    return appConfig.DEFAULT_USERNAME || 'Рыбак';
+    return appConfig.DEFAULT_USERNAME || 'Fisherman';
 }
 
 // === API FUNCTIONS ===
@@ -95,7 +95,7 @@ async function loadUserData() {
         await loadUserBalance();
     } catch (error) {
         console.error('Failed to load user data:', error);
-        showError('Не удалось загрузить данные пользователя');
+        showError('Failed to load user data');
     }
 }
 
@@ -126,7 +126,7 @@ async function loadFishCollection() {
         updateFishCount();
     } catch (error) {
         console.error('Failed to load fish collection:', error);
-        showError('Не удалось загрузить коллекцию рыб');
+        showError('Failed to load fish collection');
     }
 }
 
@@ -139,7 +139,7 @@ function createLoadingGrid(count) {
                     <div class="fish-image-skeleton"></div>
                 </div>
                 <div class="fish-card-info">
-                    <div class="fish-name">Загрузка...</div>
+                    <div class="fish-name">Loading...</div>
                 </div>
             </div>
         `;
@@ -165,7 +165,7 @@ async function loadUserRods() {
         updateRodsCount();
     } catch (error) {
         console.error('Failed to load rods:', error);
-        showError('Не удалось загрузить удочки');
+        showError('Failed to load rods');
     }
 }
 
@@ -198,7 +198,7 @@ async function setActiveRod(rodId) {
         return true;
     } catch (error) {
         console.error('Failed to set active rod:', error);
-        showError('Не удалось сменить удочку');
+        showError('Failed to change rod');
         return false;
     }
 }
@@ -288,10 +288,10 @@ function updateFishGrid() {
                         <div class="ripple"></div>
                     </div>
                 </div>
-                <h3 class="empty-state-title">Коллекция пуста</h3>
-                <p class="empty-state-desc">Начните рыбачить, чтобы поймать первую рыбу!</p>
+                <h3 class="empty-state-title">Collection is Empty</h3>
+                <p class="empty-state-desc">Start fishing to catch your first fish!</p>
                 <button class="empty-state-btn" id="empty-state-cast-btn">
-                    🎯 Забросить удочку
+                    🎯 Cast Rod
                 </button>
             </div>
         `;
@@ -398,8 +398,8 @@ function updateRodSelector() {
         mainDisplay.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🎣</div>
-                <p>Нет удочек</p>
-                <small>Получите первую удочку, чтобы начать рыбачить!</small>
+                <p>No Rods</p>
+                <small>Get your first rod to start fishing!</small>
             </div>
         `;
         indicators.innerHTML = '';
@@ -430,7 +430,7 @@ function updateRodSelector() {
 function createMainRodDisplay(rod) {
     const leverageDisplay = rod.leverage > 0 ? `+${rod.leverage}x` : `${rod.leverage}x`;
     const rodTypeIcon = rod.rod_type === 'long' ? '🚀' : rod.rod_type === 'short' ? '🔻' : '🎣';
-    const rodTypeText = rod.rod_type === 'long' ? 'Лонг позиция' : rod.rod_type === 'short' ? 'Шорт позиция' : 'Позиция';
+    const rodTypeText = rod.rod_type === 'long' ? 'Long Position' : rod.rod_type === 'short' ? 'Short Position' : 'Position';
     
     // Пытаемся использовать SVG изображение, иначе эмодзи
     const rodType = rod.rod_type === 'long' ? 'long' : 'short';
@@ -447,7 +447,7 @@ function createMainRodDisplay(rod) {
             <div class="main-rod-name">${rod.name}</div>
             <div class="main-rod-type">${rodTypeText}</div>
             <div class="main-rod-leverage leverage-${rod.leverage > 0 ? 'positive' : 'negative'}">
-                ${leverageDisplay} плечо
+                ${leverageDisplay} Leverage
             </div>
         </div>
     `;
@@ -493,10 +493,10 @@ function updateRodActionButton(rod) {
     actionBtn.style.display = 'flex';
     
     if (isActive) {
-        actionBtn.textContent = 'Активная удочка';
+        actionBtn.textContent = 'Active Rod';
         actionBtn.className = 'rod-action-btn active-rod';
     } else {
-        actionBtn.textContent = 'Взять эту удочку';
+        actionBtn.textContent = 'Take This Rod';
         actionBtn.className = 'rod-action-btn select-rod';
     }
 }
@@ -528,7 +528,7 @@ async function handleRodAction() {
     
     if (isActive) {
         // Удочка уже активна, возвращаемся на главный экран
-        showMessage('Эта удочка уже активна!');
+        showMessage('This rod is already active!');
         // Возвращаемся на главный экран через короткую задержку
         setTimeout(() => {
             showScreen('lobby');
@@ -539,7 +539,7 @@ async function handleRodAction() {
     // Выбираем новую удочку
     const success = await setActiveRod(currentRod.id);
     if (success) {
-        showMessage('Удочка выбрана!');
+        showMessage('Rod selected!');
         // Автоматически возвращаемся на главный экран
         setTimeout(() => {
             showScreen('lobby');
@@ -559,7 +559,7 @@ async function selectRod(rodId) {
                 updateRodSelector();
             }
         }
-        showMessage('Удочка выбрана!');
+        showMessage('Rod selected!');
     }
 }
 
@@ -713,14 +713,14 @@ function showFishDetails(fishId) {
             </div>
             
             <div class="fish-trades-section">
-                <div class="fish-trades-title">📈 История сделок (${fishGroup.length})</div>
+                <div class="fish-trades-title">📈 Trading History (${fishGroup.length})</div>
                 <div class="fish-trades-list">
                     ${fishGroup.map(trade => createTradeItem(trade)).join('')}
                 </div>
             </div>
             
             <button class="modal-close-btn" id="modal-close-btn">
-                ✕ Закрыть
+                ✕ Close
             </button>
         </div>
     `;
@@ -762,9 +762,9 @@ function castInTelegram() {
     } else {
         // Fallback для тестирования в development mode
         if (appConfig.isDevelopment) {
-            showMessage('🎣 В реальном приложении откроется чат с ботом для рыбалки!', 3000);
+            showMessage('🎣 In real app, bot chat will open for fishing!', 3000);
         } else {
-            alert('В реальном приложении откроется чат с ботом для рыбалки!');
+            alert('In real app, bot chat will open for fishing!');
         }
     }
 }
@@ -821,11 +821,11 @@ function getRarityOrder(rarity) {
 
 function getRarityText(rarity) {
     const texts = {
-        'trash': 'Мусор',
-        'common': 'Обычная',
-        'rare': 'Редкая',
-        'epic': 'Эпическая',
-        'legendary': 'Легендарная'
+        'trash': 'Trash',
+        'common': 'Common',
+        'rare': 'Rare',
+        'epic': 'Epic',
+        'legendary': 'Legendary'
     };
     return texts[rarity] || rarity;
 }
@@ -934,6 +934,6 @@ async function initializeApp() {
         ]);
     } catch (error) {
         console.error('Failed to initialize app:', error);
-        showError('Не удалось загрузить данные');
+        showError('Failed to load data');
     }
 }

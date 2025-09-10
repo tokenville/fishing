@@ -21,6 +21,7 @@ This is a Telegram bot for a virtual fishing game with cryptocurrency trading me
 - **📱 Telegram Mini App**: RPG-style web interface for viewing fish collection, rods, and trading history
 - **🚀 Bunny CDN Integration**: Global content delivery network for lightning-fast image loading with automatic optimization
 - **💫 Smart Skeleton Loaders**: Animated loading placeholders that maintain layout and improve UX
+- **⏰ Quick Fishing Prevention**: Anti-spam system with funny messages to encourage patience and market movement
 
 ## Architecture
 
@@ -156,12 +157,13 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 - **Level System**: Unlock new ponds as players progress
 - **Leaderboard System**: Global, weekly, and daily rankings by virtual balance
 - **Smart Matching**: Fish selection algorithm considers all conditions for realistic catches
+- **Quick Fishing Prevention**: Anti-spam system prevents fishing in under 60 seconds with minimal P&L (<0.1%)
 
 ## Bot Commands
 
 - `/start` - Welcome message with player stats and **🎮 Открыть игру** button for Mini App
 - `/cast` - Start animated fishing sequence using player's active selected rod (costs 1 BAIT token)
-- `/hook` - Catch fish using new database-driven system with personalized stories
+- `/hook` - Catch fish using new database-driven system with personalized stories (includes anti-spam protection)
 - `/status` - Check active position with multi-currency P&L updates
 - `/pnl` - Show virtual balance, P&L statistics, and leaderboard position
 - `/leaderboard` - Display top 10 players by virtual balance with trading stats
@@ -339,6 +341,8 @@ python3 restore_fish_backup.py
 - `get_catch_story_from_db(fish_data, pnl, time_fishing)` - Generate personalized story
 - `get_help_text()` - Dynamic help generation from database
 - `get_crypto_price(base_currency)` - Multi-currency price fetching
+- `get_fishing_time_seconds(entry_time)` - Calculate fishing time in seconds for quick fishing detection
+- `get_quick_fishing_message(fishing_time_seconds)` - Generate random funny anti-spam messages
 - **AI Prompt Management Functions**:
   - `get_fish_ai_prompt(fish_id)` - Get AI prompt for specific fish
   - `update_fish_ai_prompt(fish_id, ai_prompt)` - Update AI prompt for fish
@@ -415,6 +419,13 @@ prompt_manager.clear_image_cache("Fish Name")  # Clear specific fish
 **Important:** When updating AI prompts in the database, only include the fish-specific description. The static style context is automatically appended during image generation.
 
 ## 🚀 Recent Enhancements (Absurd Fish Update)
+
+### Quick Fishing Prevention System
+- **Anti-Spam Protection**: Prevents fishing completion in under 60 seconds with minimal P&L (<0.1%)
+- **10 Funny Messages**: Randomized English messages encouraging patience (e.g., "Even Flash doesn't catch fish in 46 seconds!")
+- **Real-Time Feedback**: Shows exact fishing time and remaining wait time for 1-minute minimum
+- **Market Education**: Explains need to wait for crypto market movement to create meaningful P&L
+- **Position Preservation**: Keeps fishing position active so players can try again after waiting
 
 ### Absurd Fish Database
 - **Expanded to 87 Fish**: Complete redesign with absurd, trash-style concepts

@@ -16,11 +16,11 @@ from src.database.db_manager import (
     get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit,
     get_user_virtual_balance, get_flexible_leaderboard
 )
-from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing
+from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing, get_fishing_time_seconds
 from src.bot.message_templates import (
     get_help_text,
     format_no_fishing_status, format_new_user_status,
-    format_enhanced_status_message, get_catch_story_from_db
+    format_enhanced_status_message, get_catch_story_from_db, get_quick_fishing_message
 )
 from src.bot.animations import (
     safe_reply, animate_casting_sequence,
@@ -38,7 +38,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         # Check rate limit
         if not await check_rate_limit(user_id):
-            await safe_reply(update, "⏳ Слишком много запросов! Подождите немного перед следующей командой.")
+            await safe_reply(update, "⏳ Too many requests! Wait a bit before the next command.")
             return
         # Get or create user
         user = await get_user(user_id)
@@ -53,18 +53,18 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Check if user has enough BAIT
         if user['bait_tokens'] <= 0:
-            await safe_reply(update, "🎣 Нет токенов $BAIT! Нужно больше червячков для рыбалки 🪱")
+            await safe_reply(update, "🎣 No $BAIT tokens! Need more worms for fishing 🪱")
             return
         
         # Check if user is already fishing
         active_position = await get_active_position(user_id)
         if active_position:
-            await safe_reply(update, f"🎣 У {username} уже есть удочка в воде! Используйте /hook чтобы вытащить улов или /status чтобы проверить прогресс.")
+            await safe_reply(update, f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress.")
             return
         
         # Use bait and get current price
         if not await use_bait(user_id):
-            await safe_reply(update, "🎣 Не удалось использовать наживку. Попробуйте еще раз!")
+            await safe_reply(update, "🎣 Failed to use bait. Try again!")
             return
         
         user_level = user['level'] if user else 1
@@ -82,7 +82,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             available_ponds = await get_available_ponds(1)  # Force starter pond access
             
         if not available_ponds or not user_rods:
-            await safe_reply(update, "🎣 Что-то пошло не так с оборудованием! Попробуйте еще раз.")
+            await safe_reply(update, "🎣 Something went wrong with equipment! Try again.")
             return
         
         # Use active rod instead of random selection
@@ -90,7 +90,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         active_rod = await ensure_user_has_active_rod(user_id)
         
         if not active_rod:
-            await safe_reply(update, "🎣 Не удалось найти активную удочку! Попробуйте еще раз.")
+            await safe_reply(update, "🎣 Failed to find active fishing rod! Try again.")
             return
             
         # Pre-select pond and use active rod
@@ -118,7 +118,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     except Exception as e:
         logger.error(f"Error in cast command: {e}")
-        await safe_reply(update, "🎣 Что-то пошло не так! Попробуйте еще раз.")
+        await safe_reply(update, "🎣 Something went wrong! Try again.")
 
 async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /hook command - pull out fish with animated sequence and rate limiting"""
@@ -128,13 +128,13 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         # Check rate limit
         if not await check_rate_limit(user_id):
-            await safe_reply(update, "⏳ Слишком много запросов! Подождите немного перед следующей командой.")
+            await safe_reply(update, "⏳ Too many requests! Wait a bit before the next command.")
             return
         # Check if user is fishing
         position = await get_active_position(user_id)
         
         if not position:
-            await safe_reply(update, f"🎣 {username} не рыбачит! Используйте /cast чтобы забросить удочку.")
+            await safe_reply(update, f"🎣 {username} is not fishing! Use /cast to throw the fishing rod.")
             return
         
         # Get pond and rod data for the position
@@ -150,7 +150,15 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Calculate P&L with leverage
         time_fishing = format_time_fishing(position['entry_time'])
+        fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
         pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+        
+        # Check for quick fishing with minimal PnL
+        if fishing_time_seconds < 60 and abs(pnl_percent) < 0.1:
+            quick_message = get_quick_fishing_message(fishing_time_seconds)
+            remaining_time = 60 - fishing_time_seconds
+            await safe_reply(update, f"{quick_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n📈 <b>P&L:</b> {pnl_percent:+.4f}%\n\n<i>Wait at least {remaining_time} more seconds (minimum 1 minute total) for the market to move!</i>")
+            return
         
         # Get user level
         user = await get_user(user_id)
@@ -184,9 +192,9 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             complete_story = format_fishing_complete_caption(
                 username=username,
                 catch_story=catch_story,
-                rod_name=rod['name'] if rod else 'Стартовая удочка',
+                rod_name=rod['name'] if rod else 'Starter rod',
                 leverage=leverage,
-                pond_name=pond['name'] if pond else '🌊 Криптовые Воды',
+                pond_name=pond['name'] if pond else '🌊 Crypto Waters',
                 pond_pair=pond['trading_pair'] if pond else 'ETH/USDT',
                 time_fishing=time_fishing,
                 entry_price=entry_price,
@@ -216,12 +224,12 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete
-            await safe_reply(update, f"🎣 {username} поймал что-то странное! P&L: {pnl_percent:+.1f}%")
+            await safe_reply(update, f"🎣 {username} caught something strange! P&L: {pnl_percent:+.1f}%")
             await close_position(position['id'], current_price, pnl_percent, None)
         
     except Exception as e:
         logger.error(f"Error in hook command: {e}")
-        await safe_reply(update, "🎣 Ошибка при вытаскивании рыбы! Попробуйте еще раз.")
+        await safe_reply(update, "🎣 Error pulling out fish! Try again.")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status command - show current fishing position"""
@@ -258,9 +266,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         time_fishing = format_time_fishing(position['entry_time'])
         
         # Send enhanced status message
-        pond_name = pond['name'] if pond else 'Неизвестный водоем'
+        pond_name = pond['name'] if pond else 'Unknown Pond'
         pond_pair = pond['trading_pair'] if pond else f'{base_currency}/USDT'
-        rod_name = rod['name'] if rod else 'Неизвестная удочка'
+        rod_name = rod['name'] if rod else 'Unknown Rod'
         user_level = user['level'] if user else 1
         
         await safe_reply(update, format_enhanced_status_message(
@@ -270,7 +278,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     except Exception as e:
         logger.error(f"Error in status command: {e}")
-        await safe_reply(update, "🎣 Ошибка при проверке статуса! Попробуйте еще раз.")
+        await safe_reply(update, "🎣 Error checking status! Try again.")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command - show personalized user stats and welcome"""
@@ -307,31 +315,33 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         # Create personalized start message
         status_emoji = "🎣" if active_position else "🌊"
-        fishing_status = "Сейчас рыбачите!" if active_position else "Готов к рыбалке"
+        fishing_status = "Currently fishing!" if active_position else "Ready to fish"
         
-        start_message = f"""<b>🎣 Добро пожаловать, {username}!</b>
+        start_message = f"""<b>🎣 Welcome, {username}!</b>
 
-{status_emoji} <b>Ваша статистика:</b>
+{status_emoji} <b>Your Stats:</b>
 
-🎯 <b>Уровень:</b> {user_level}
-⚡ <b>Опыт:</b> {experience} XP
-🪱 <b>Токены $BAIT:</b> {bait_tokens}
-🎣 <b>Удочек:</b> {rods_count}
-🌊 <b>Доступно водоемов:</b> {ponds_count}
-📊 <b>Статус:</b> {fishing_status}
+🎯 <b>Level:</b> {user_level}
+⚡ <b>Experience:</b> {experience} XP
+🪱 <b>$BAIT Tokens:</b> {bait_tokens}
+🎣 <b>Fishing Rods:</b> {rods_count}
+🌊 <b>Available Ponds:</b> {ponds_count}
+📊 <b>Status:</b> {fishing_status}
 
-<b>🎮 Быстрый старт:</b>
-• /cast - Забросить удочку
-• /status - Проверить прогресс
-• /help - Полная справка
+<b>🎮 Quick Start:</b>
+• /cast - Cast your rod
+• /hook - Hook the fish
+• /status - Check progress
+• /leaderboard - Best anglers
+• /help - Full guide
 
-<i>Каждый заброс стоит 1 токен $BAIT!</i>"""
+<i>Each cast costs 1 $BAIT token!</i>"""
 
         # Create web app button
         webapp_url = os.environ.get('WEBAPP_URL', 'http://localhost:8000/webapp')
         keyboard = [[
             InlineKeyboardButton(
-                "🎮 Открыть игру", 
+                "🎮 Open Game", 
                 web_app=WebAppInfo(url=webapp_url)
             )
         ]]
@@ -341,7 +351,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
     except Exception as e:
         logger.error(f"Error in start command: {e}")
-        await safe_reply(update, "🎣 Добро пожаловать! Используйте /help для справки.")
+        await safe_reply(update, "🎣 Welcome! Use /help for guide.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command - show dynamic help from database"""
@@ -353,11 +363,11 @@ async def test_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         # Check if it's development mode (you can add your own check here)
         if update.effective_user.id not in [6919477427]:  # Replace with your dev user IDs
-            await safe_reply(update, "🎣 Эта команда доступна только разработчикам!")
+            await safe_reply(update, "🎣 This command is only available to developers!")
             return
         
         username = update.effective_user.username or update.effective_user.first_name
-        await safe_reply(update, "🎨 Генерирую тестовую карточку...")
+        await safe_reply(update, "🎨 Generating test card...")
         
         # Generate test card with random fish
         import random
@@ -372,16 +382,16 @@ async def test_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if card_image:
                 await update.message.reply_photo(
                     photo=BytesIO(card_image),
-                    caption=f"🎣 Тестовая карточка: {fish_data['emoji']} {fish_data['name']}"
+                    caption=f"🎣 Test card: {fish_data['emoji']} {fish_data['name']}"
                 )
             else:
-                await safe_reply(update, "🎣 Не удалось сгенерировать изображение")
+                await safe_reply(update, "🎣 Failed to generate image")
         else:
-            await safe_reply(update, "🎣 Не удалось найти подходящую рыбу")
+            await safe_reply(update, "🎣 Failed to find suitable fish")
             
     except Exception as e:
         logger.error(f"Error in test_card command: {e}")
-        await safe_reply(update, f"🎣 Ошибка генерации: {str(e)}")
+        await safe_reply(update, f"🎣 Generation error: {str(e)}")
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /leaderboard command - show top 10 players"""
@@ -406,18 +416,18 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         
         # Format title based on period
         titles = {
-            'all': '📊 <b>Общий лидерборд</b>',
-            'week': '📊 <b>Недельный лидерборд</b>',
-            'day': '📊 <b>Дневной лидерборд</b>',
-            'month': '📊 <b>Месячный лидерборд</b>'
+            'all': '📊 <b>Overall Leaderboard</b>',
+            'week': '📊 <b>Weekly Leaderboard</b>',
+            'day': '📊 <b>Daily Leaderboard</b>',
+            'month': '📊 <b>Monthly Leaderboard</b>'
         }
         
-        message = [titles.get(time_period, '📊 <b>Лидерборд</b>')]
+        message = [titles.get(time_period, '📊 <b>Leaderboard</b>')]
         message.append('')
         
         # Top players
         if data['top']:
-            message.append('<b>🏆 Топ-10 игроков:</b>')
+            message.append('<b>🏆 Top 10 Players:</b>')
             for i, player in enumerate(data['top'], 1):
                 emoji = '🥇' if i == 1 else '🥈' if i == 2 else '🥉' if i == 3 else f'{i}.'
                 balance_str = f"${player['balance']:,.2f}"
@@ -426,30 +436,30 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 message.append(
                     f"{emoji} <b>{player['username']}</b>: {balance_str} {trend}"
                 )
-                message.append(f"    └ {player['total_trades']} сделок, средний P&L: {player['avg_pnl']:.1f}%")
+                message.append(f"    └ {player['total_trades']} trades, avg P&L: {player['avg_pnl']:.1f}%")
         else:
-            message.append('Пока нет активных игроков')
+            message.append('No active players yet')
         
         # User position
         if data['user_position']:
             pos = data['user_position']
             message.append('')
-            message.append(f"<b>📍 Ваша позиция:</b>")
+            message.append(f"<b>📍 Your Position:</b>")
             balance_color = '🟢' if pos['balance'] >= 10000 else '🔴'
             message.append(
-                f"Место: <b>#{pos['rank']}</b> из {data['total_players']} (топ {pos['percentile']:.0f}%)"
+                f"Rank: <b>#{pos['rank']}</b> of {data['total_players']} (top {pos['percentile']:.0f}%)"
             )
             message.append(
-                f"Баланс: {balance_color} <b>${pos['balance']:,.2f}</b>"
+                f"Balance: {balance_color} <b>${pos['balance']:,.2f}</b>"
             )
             if pos['total_trades'] > 0:
                 message.append(
-                    f"Средний P&L: {pos['avg_pnl']:.1f}%"
+                    f"Avg P&L: {pos['avg_pnl']:.1f}%"
                 )
         
         # Help text
         message.append('')
-        message.append('<i>Используйте /leaderboard week для недельного рейтинга</i>')
+        message.append('<i>Use /leaderboard week for weekly rating</i>')
         
         await update.message.reply_text(
             '\n'.join(message),
@@ -458,7 +468,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         
     except Exception as e:
         logger.error(f"Error in leaderboard command: {e}")
-        await safe_reply(update, "🎣 Ошибка при загрузке лидерборда. Попробуйте позже.")
+        await safe_reply(update, "🎣 Error loading leaderboard. Try later.")
 
 async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /pnl command - show user's P&L and balance"""
@@ -470,7 +480,7 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         balance_data = await get_user_virtual_balance(user_id)
         
         # Format message
-        message = [f"<b>💰 P&L статистика для {username}</b>", ""]
+        message = [f"<b>💰 P&L Statistics for {username}</b>", ""]
         
         # Balance with color indicator
         balance = balance_data['balance']
@@ -478,27 +488,27 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         profit_loss = balance - 10000
         profit_loss_str = f"+${profit_loss:,.2f}" if profit_loss > 0 else f"-${abs(profit_loss):,.2f}"
         
-        message.append(f"<b>Текущий баланс:</b> {balance_color} ${balance:,.2f}")
-        message.append(f"<b>Общий P&L:</b> {profit_loss_str} ({(profit_loss/10000)*100:.1f}%)")
+        message.append(f"<b>Current Balance:</b> {balance_color} ${balance:,.2f}")
+        message.append(f"<b>Total P&L:</b> {profit_loss_str} ({(profit_loss/10000)*100:.1f}%)")
         message.append("")
         
         # Trading stats
         if balance_data['total_trades'] > 0:
             win_rate = (balance_data['winning_trades'] / balance_data['total_trades']) * 100
-            message.append("<b>📊 Статистика торговли:</b>")
-            message.append(f"Всего сделок: {balance_data['total_trades']}")
-            message.append(f"Прибыльных: {balance_data['winning_trades']} ({win_rate:.0f}%)")
-            message.append(f"Средний P&L: {balance_data['avg_pnl']:.2f}%")
+            message.append("<b>📊 Trading Statistics:</b>")
+            message.append(f"Total Trades: {balance_data['total_trades']}")
+            message.append(f"Profitable: {balance_data['winning_trades']} ({win_rate:.0f}%)")
+            message.append(f"Average P&L: {balance_data['avg_pnl']:.2f}%")
         else:
-            message.append("<i>У вас пока нет завершенных сделок</i>")
-            message.append("Используйте /cast чтобы начать рыбалку!")
+            message.append("<i>You have no completed trades yet</i>")
+            message.append("Use /cast to start fishing!")
         
         # Position in leaderboard
         leaderboard_data = await get_flexible_leaderboard(user_id=user_id, limit=1)
         if leaderboard_data['user_position']:
             pos = leaderboard_data['user_position']
             message.append("")
-            message.append(f"<b>🏆 Позиция в рейтинге:</b> #{pos['rank']} (топ {pos['percentile']:.0f}%)")
+            message.append(f"<b>🏆 Leaderboard Position:</b> #{pos['rank']} (top {pos['percentile']:.0f}%)")
         
         await update.message.reply_text(
             '\n'.join(message),
@@ -507,4 +517,4 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     except Exception as e:
         logger.error(f"Error in pnl command: {e}")
-        await safe_reply(update, "🎣 Ошибка при загрузке P&L. Попробуйте позже.")
+        await safe_reply(update, "🎣 Error loading P&L. Try later.")

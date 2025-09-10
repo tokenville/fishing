@@ -1,798 +1,721 @@
-# Absurd Fish Data - Trash Style Redesign
-# All descriptions focus on how you caught them, not swimming in water
-# AI prompts designed for absurd, unexpected, crude MS Paint style artwork
+# Absurd Fish Data - English Edition with 100 Fish
+# Better PnL correspondence: zero/negative = trash/absurd catches, positive = actual fish
+# High variability and creativity in naming and concepts
 
 ABSURD_FISH_DATA = [
-    # TRASH TIER (-150% to 0%)
+    # TRASH/ABSURD TIER (-50% to 0%) - Not actually fish, absurd catches
     {
-        "name": "Мусорная Креветка",
-        "emoji": "🦐",
-        "description": "Еще больше разочарования",
-        "min_pnl": -150.0,
-        "max_pnl": -50.0,
-        "rarity": "trash",
-        "ai_prompt": "Depressed shrimp wearing tiny sunglasses and holding a cigarette, looking completely defeated and existentially exhausted, with droopy antennae and a 'I hate Mondays' expression"
-    },
-    {
-        "name": "Ржавый Якорь",
-        "emoji": "⚓",
-        "description": "Тяжелый металлолом с морского дна",
-        "min_pnl": -120.0,
-        "max_pnl": -30.0,
-        "rarity": "trash",
-        "ai_prompt": "An anchor that's somehow alive and extremely annoyed about being disturbed, with googly eyes, a grumpy mouth, and tiny arms crossed in frustration, covered in seaweed that looks like messy hair"
-    },
-    {
-        "name": "Сломанная Удочка",
+        "name": "Broken Dreams",
         "emoji": "💔",
-        "description": "Останки чьих-то неудачных приключений",
-        "min_pnl": -110.0,
-        "max_pnl": -40.0,
-        "rarity": "trash",
-        "ai_prompt": "A broken fishing rod that gained consciousness and is now crying dramatically with huge cartoon tears, wearing a tiny bandage on its broken part like an injured cartoon character"
-    },
-    {
-        "name": "Старый Сапог",
-        "emoji": "👢",
-        "description": "Мусор со дна водоема",
-        "min_pnl": -100.0,
+        "description": "A crumpled lottery ticket that somehow got wet",
+        "min_pnl": -50.0,
         "max_pnl": -20.0,
         "rarity": "trash",
-        "ai_prompt": "An old boot that's somehow very proud of itself, wearing a monocle and top hat, striking a dignified pose despite being covered in algae and having a fish living inside it as a roommate"
+        "ai_prompt": "Crumpled lottery ticket with sad cartoon eyes, floating in water looking defeated"
     },
     {
-        "name": "Тухлое Яйцо",
-        "emoji": "🥚",
-        "description": "Протухший деликатес неизвестного происхождения",
-        "min_pnl": -90.0,
+        "name": "Rusty Spoon",
+        "emoji": "🥄",
+        "description": "Someone's abandoned camping utensil with trust issues",
+        "min_pnl": -45.0,
         "max_pnl": -15.0,
         "rarity": "trash",
-        "ai_prompt": "A cracked rotten egg with a face that looks extremely stoned and happy, with droopy eyes, a goofy smile, and green stink lines coming out of it like it's in a blissful trance"
+        "ai_prompt": "Rusty spoon with googly eyes, wearing a tiny hat, looking grumpy"
     },
     {
-        "name": "Гнилая Водоросль",
-        "emoji": "🌿",
-        "description": "Скользкая масса разлагающихся растений",
-        "min_pnl": -80.0,
-        "max_pnl": -5.0,
-        "rarity": "trash",
-        "ai_prompt": "A tangle of seaweed that looks like a messy wig worn by an invisible person, with the seaweed forming a ridiculous hairstyle and somehow having facial features made of debris"
-    },
-    {
-        "name": "Дохлая Медуза",
-        "emoji": "💀",
-        "description": "Бесформенная масса морского планктона",
-        "min_pnl": -70.0,
-        "max_pnl": -20.0,
-        "rarity": "trash",
-        "ai_prompt": "A dead jellyfish that's actually just pretending to be dead but doing a terrible job at it, with one eye slightly open and a guilty expression, caught red-handed in its fake death act"
-    },
-    {
-        "name": "Пластиковая Бутылка",
-        "emoji": "🗑️",
-        "description": "Мусор человеческой цивилизации",
-        "min_pnl": -60.0,
+        "name": "Soggy Pizza",
+        "emoji": "🍕",
+        "description": "Last night's dinner that escaped the trash can",
+        "min_pnl": -40.0,
         "max_pnl": -10.0,
         "rarity": "trash",
-        "ai_prompt": "A plastic bottle that has evolved arms and legs and is now doing a victory dance, completely oblivious to the fact that it's just trash, with a huge smile and jazz hands"
+        "ai_prompt": "Wet pizza slice with cartoon face, dripping cheese sadly into water"
     },
     {
-        "name": "Жестяная Банка",
-        "emoji": "🥫",
-        "description": "Консервная банка с острыми краями",
-        "min_pnl": -50.0,
+        "name": "Lost Sock",
+        "emoji": "🧦",
+        "description": "The legendary missing sock from your laundry",
+        "min_pnl": -35.0,
         "max_pnl": -8.0,
         "rarity": "trash",
-        "ai_prompt": "A tin can that thinks it's a knight in armor, wearing a tiny cape and holding a toothpick sword, looking heroic despite being obviously just garbage with delusions of grandeur"
+        "ai_prompt": "Single sock with arms raised in victory, finally found after years"
     },
     {
-        "name": "Пьяная Пиявка",
-        "emoji": "🍺",
-        "description": "Паразит в состоянии алкогольного опьянения",
-        "min_pnl": -40.0,
+        "name": "Expired Coupon",
+        "emoji": "🎫",
+        "description": "20% off something you never wanted anyway",
+        "min_pnl": -30.0,
         "max_pnl": -5.0,
         "rarity": "trash",
-        "ai_prompt": "A leech wearing tiny sunglasses and holding a miniature beer bottle, with a big goofy grin and hiccup bubbles around it, clearly having the time of its life at an underwater party"
+        "ai_prompt": "Faded coupon with sad face, marked with big red X for expired"
     },
     {
-        "name": "Рыба-Сожаление",
-        "emoji": "🐡",
-        "description": "Колючая рыба, которая приносит убытки",
+        "name": "Dead Battery",
+        "emoji": "🔋",
+        "description": "Completely drained, just like your portfolio",
+        "min_pnl": -25.0,
+        "max_pnl": -3.0,
+        "rarity": "trash",
+        "ai_prompt": "Battery with exhausted cartoon face, lying on side with X eyes"
+    },
+    {
+        "name": "Plastic Bag",
+        "emoji": "🛍️",
+        "description": "Someone's abandoned shopping shame",
         "min_pnl": -20.0,
+        "max_pnl": -2.0,
+        "rarity": "trash",
+        "ai_prompt": "Plastic bag dancing underwater, oblivious to being trash"
+    },
+    {
+        "name": "Bubble Wrap",
+        "emoji": "📦",
+        "description": "Already popped, naturally",
+        "min_pnl": -15.0,
+        "max_pnl": -1.0,
+        "rarity": "trash",
+        "ai_prompt": "Deflated bubble wrap with disappointed face, all bubbles popped"
+    },
+    {
+        "name": "USB Cable",
+        "emoji": "🔌",
+        "description": "Tangled beyond human comprehension",
+        "min_pnl": -10.0,
         "max_pnl": 0.0,
         "rarity": "trash",
-        "ai_prompt": "A pufferfish that's permanently inflated from eating too much fast food, with a guilty expression and tiny sweatpants that don't fit, looking like it just realized it made poor life choices"
+        "ai_prompt": "Impossibly tangled USB cable with confused expression, knots everywhere"
     },
-  {
-    "name": "Кибер-Карась",
-    "emoji": "🤖🐟",
-    "description": "Поймался, пока чинил розетку удочкой — оказался рыбой с USB-портом вместо хвоста",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Robotic-looking crucian carp with glowing USB tail and goofy cartoon eyes, pretending to download something"
-  },
-  {
-    "name": "Кефирная Селедка",
-    "emoji": "🥛🐟",
-    "description": "Всплыла прямо из банки с кефиром, ещё и пузырится от возмущения",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon herring half submerged in kefir cup, foamy bubbles, angry but silly expression"
-  },
-  {
-    "name": "Гопник Сомик",
-    "emoji": "🧢",
-    "description": "Под мостом сидел, шипел и требовал семки за проход",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Small catfish in tracksuit squatting, sunflower seeds in fins, smug cartoon grin"
-  },
-  {
-    "name": "Офисный Гольян",
-    "emoji": "📎",
-    "description": "Поймал прямо в портфеле, жалуется на дедлайны",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Tiny fish wearing tie and carrying coffee cup, stressed office worker vibes"
-  },
-  {
-    "name": "Батарейная Плотва",
-    "emoji": "🔋",
-    "description": "Клюнула на зарядку от телефона, теперь всё пищит",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon roach fish shaped like AA battery, sparking slightly, confused smile"
-  },
-  {
-    "name": "Пельмень-Ёрш",
-    "emoji": "🥟",
-    "description": "Выпал прямо из кастрюли, притворяясь едой",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Spiky fish wrapped like dumpling, steam lines above, goofy expression"
-  },
-  {
-    "name": "Диско-Судак",
-    "emoji": "💿",
-    "description": "Выскочил на свет фонаря и начал крутиться под музыку",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Pike with disco ball scales, dancing pose, colorful lights reflecting"
-  },
-  {
-    "name": "Хипстерская Форель",
-    "emoji": "🧔",
-    "description": "Клюнула на эспрессо-боб, носит очки в роговой оправе",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon trout with beard, beanie, holding cup of coffee, ironic smile"
-  },
-  {
-    "name": "Пельмень-Гуппи",
-    "emoji": "🍲",
-    "description": "Затаился в супе, думал его никто не заметит",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Tiny guppy floating in bowl of soup, silly face peeking out"
-  },
-  {
-    "name": "ТикТок-Карась",
-    "emoji": "📱",
-    "description": "Вылез из телефона, танцевал и сам залез в садок",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon carp holding smartphone, making dance pose, sparkly eyes"
-  },
-  {
-    "name": "Картофельный Ёрш",
-    "emoji": "🥔",
-    "description": "Сидел в луже как картошка, но с плавниками",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Round spiky fish with potato texture skin, silly cartoon grin"
-  },
-  {
-    "name": "Шлёпанец-Рыба",
-    "emoji": "🩴",
-    "description": "Поймал тапок, но он шевелился и пытался уплыть",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon fish shaped like flip-flop sandal, eyes on strap, goofy hopping motion"
-  },
-  {
-    "name": "Дискета-Карась",
-    "emoji": "💾",
-    "description": "Застрял между папками, пыльный, но живой",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Carp with body like floppy disk, label sticker, cartoon derpy smile"
-  },
-  {
-    "name": "Селфи-Сом",
-    "emoji": "🤳",
-    "description": "Сам запрыгнул на берег, чтобы сделать кадр",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Catfish holding tiny smartphone selfie stick, wide toothy grin"
-  },
-  {
-    "name": "Рыба-Пылесос",
-    "emoji": "🧹",
-    "description": "Сосала ил с таким энтузиазмом, что зацепилась сама",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Fish shaped like vacuum cleaner, hose-like mouth, funny determined eyes"
-  },
-  {
-    "name": "Фонарная Щучка",
-    "emoji": "💡",
-    "description": "Засела под уличным фонарём и думала, что это её солнце",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Small pike staring lovingly at streetlamp, glowing eyes, silly devotion"
-  },
-  {
-    "name": "Чайничная Гольянка",
-    "emoji": "🍵",
-    "description": "Сидела прямо в чайнике и свистела вместо крышки",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Tiny minnow inside kettle, blowing steam whistle, cartoon face"
-  },
-  {
-    "name": "Скумбрия-Диджей",
-    "emoji": "🎧",
-    "description": "Поймал с катушкой, а она её крутит как пластинку",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Mackerel with DJ headphones spinning reel like turntable, wide grin"
-  },
-  {
-    "name": "Гребешок-Мим",
-    "emoji": "🎭",
-    "description": "Вылез на берег и начал молча изображать стену",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Cartoon shellfish in mime outfit, face paint, pretending to be trapped in box"
-  },
-  {
-    "name": "Бутылочная Плотва",
-    "emoji": "🍾",
-    "description": "Застряла в горлышке и теперь шумит как маракас",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "common",
-    "ai_prompt": "Roach fish stuck inside glass bottle, rattling, big silly eyes"
-  },
+    {
+        "name": "Empty Promise",
+        "emoji": "💨",
+        "description": "Technically caught something, but it's nothing",
+        "min_pnl": -5.0,
+        "max_pnl": 0.0,
+        "rarity": "trash",
+        "ai_prompt": "Transparent bubble with 'IOU' written inside, floating away"
+    },
 
-    # COMMON TIER (0% to 45%)
+    # TINY FISH TIER (0% to 15%) - Small, silly fish
     {
-        "name": "Счастливая Плотва",
+        "name": "Anxiety Anchovy",
         "emoji": "🐟",
-        "description": "Маленькая, но приносящая удачу",
+        "description": "Constantly worried about being eaten",
         "min_pnl": 0.0,
-        "max_pnl": 10.0,
+        "max_pnl": 3.0,
         "rarity": "common",
-        "ai_prompt": "A small fish wearing oversized lucky horseshoe earrings and a four-leaf clover hat, with huge optimistic eyes and a thumbs up fin, radiating naive positivity like a motivational poster"
+        "ai_prompt": "Tiny anchovy with wide worried eyes, biting nails nervously"
     },
     {
-        "name": "Серебряная Плотвичка",
-        "emoji": "🐟",
-        "description": "Скромная, но надежная рыбка",
-        "min_pnl": 0.0,
-        "max_pnl": 8.0,
-        "rarity": "common",
-        "ai_prompt": "A tiny silver fish wearing librarian glasses and a cardigan, holding a briefcase and looking extremely professional despite being the size of a paperclip, like a fish accountant"
-    },
-    {
-        "name": "Прудовая Верховка",
+        "name": "Procrastinating Minnow",
         "emoji": "🐠",
-        "description": "Поверхностная рыбка спокойных вод",
-        "min_pnl": 0.0,
+        "description": "Will swim upstream tomorrow, maybe",
+        "min_pnl": 0.5,
+        "max_pnl": 4.0,
+        "rarity": "common",
+        "ai_prompt": "Small fish lying on underwater couch, checking phone lazily"
+    },
+    {
+        "name": "Caffeinated Guppy",
+        "emoji": "☕",
+        "description": "Had too much plankton espresso",
+        "min_pnl": 1.0,
+        "max_pnl": 5.0,
+        "rarity": "common",
+        "ai_prompt": "Tiny fish vibrating rapidly, eyes wide, holding espresso cup"
+    },
+    {
+        "name": "Hipster Herring",
+        "emoji": "🤓",
+        "description": "Swims in schools before they're cool",
+        "min_pnl": 1.5,
+        "max_pnl": 6.0,
+        "rarity": "common",
+        "ai_prompt": "Small fish with tiny glasses and beard, looking pretentious"
+    },
+    {
+        "name": "Influencer Sardine",
+        "emoji": "📱",
+        "description": "Taking selfies for its 12 followers",
+        "min_pnl": 2.0,
         "max_pnl": 7.0,
         "rarity": "common",
-        "ai_prompt": "A fish doing yoga poses in mid-air, with a zen expression and tiny meditation beads, surrounded by floating lotus flowers and 'NAMASTE' written in bubbles"
+        "ai_prompt": "Sardine holding tiny phone, posing with duck lips"
     },
     {
-        "name": "Речной Пескарь",
-        "emoji": "🐟",
-        "description": "Маленький, но проворный обитатель дна",
-        "min_pnl": 1.0,
+        "name": "Conspiracy Carp",
+        "emoji": "👁️",
+        "description": "Believes the ocean is flat",
+        "min_pnl": 2.5,
+        "max_pnl": 8.0,
+        "rarity": "common",
+        "ai_prompt": "Carp wearing tinfoil hat, pointing at imaginary charts"
+    },
+    {
+        "name": "Meditation Minnow",
+        "emoji": "🧘",
+        "description": "Found inner peace at the bottom",
+        "min_pnl": 3.0,
         "max_pnl": 9.0,
         "rarity": "common",
-        "ai_prompt": "A tiny fish wearing running shoes and a headband, caught mid-sprint with motion lines behind it, looking like it's training for a fish marathon with determination"
+        "ai_prompt": "Small fish in lotus position, surrounded by zen circles"
     },
     {
-        "name": "Полосатый Окунь",
-        "emoji": "🐟",
-        "description": "Обычная речная рыба с яркими полосами",
-        "min_pnl": 2.0,
-        "max_pnl": 12.0,
+        "name": "Gossip Goldfish",
+        "emoji": "🗣️",
+        "description": "Knows everyone's business in the tank",
+        "min_pnl": 3.5,
+        "max_pnl": 10.0,
         "rarity": "common",
-        "ai_prompt": "A fish wearing a striped prison uniform and looking guilty, as if it just got caught doing something naughty, with shifty eyes and hands behind its back hiding evidence"
+        "ai_prompt": "Goldfish whispering to another fish, looking sneaky"
     },
     {
-        "name": "Быстрый Елец",
-        "emoji": "🐟",
-        "description": "Проворная рыбка горных ручьев",
-        "min_pnl": 3.0,
-        "max_pnl": 18.0,
-        "rarity": "common",
-        "ai_prompt": "A fish caught while doing parkour, frozen mid-backflip with extreme sports gear and a GoPro attached to its head, looking like an adrenaline junkie fish influencer"
-    },
-    {
-        "name": "Солнечный Гольян",
-        "emoji": "☀️",
-        "description": "Яркая рыбка летних ручьев",
+        "name": "Workout Walleye",
+        "emoji": "💪",
+        "description": "Never skips fin day",
         "min_pnl": 4.0,
         "max_pnl": 11.0,
         "rarity": "common",
-        "ai_prompt": "A fish wearing heart-shaped sunglasses and a sun hat, holding a tiny umbrella drink and giving peace signs, looking like it's on permanent vacation mode"
+        "ai_prompt": "Muscular walleye flexing tiny fins, wearing sweatband"
     },
     {
-        "name": "Золотистый Карась",
-        "emoji": "🐠",
-        "description": "Упитанная рыбка золотистого оттенка",
+        "name": "Emo Eel",
+        "emoji": "🖤",
+        "description": "Just going through a phase, mom",
+        "min_pnl": 4.5,
+        "max_pnl": 12.0,
+        "rarity": "common",
+        "ai_prompt": "Black eel with straightened hair covering one eye, looking moody"
+    },
+    {
+        "name": "Dancing Dace",
+        "emoji": "💃",
+        "description": "Has rhythm but no sense of timing",
         "min_pnl": 5.0,
+        "max_pnl": 13.0,
+        "rarity": "common",
+        "ai_prompt": "Small fish doing disco moves underwater, very enthusiastic"
+    },
+    {
+        "name": "Therapy Trout",
+        "emoji": "🛋️",
+        "description": "Listen, how does that make you feel?",
+        "min_pnl": 5.5,
+        "max_pnl": 14.0,
+        "rarity": "common",
+        "ai_prompt": "Trout wearing glasses, sitting behind tiny desk with notepad"
+    },
+    {
+        "name": "Startup Salmon",
+        "emoji": "🚀",
+        "description": "Disrupting the upstream market",
+        "min_pnl": 6.0,
         "max_pnl": 15.0,
         "rarity": "common",
-        "ai_prompt": "A chubby fish wearing a golden tracksuit and holding a donut, with crumbs around its mouth and a satisfied expression like it just finished a successful eating contest"
-    },
-    {
-        "name": "Речная Форель",
-        "emoji": "🐟",
-        "description": "Деликатесная рыба чистых вод",
-        "min_pnl": 8.0,
-        "max_pnl": 25.0,
-        "rarity": "common",
-        "ai_prompt": "A sophisticated fish wearing a bow tie and monocle, holding a wine glass and looking snobbish, as if it's judging your fishing technique and finding it rather pedestrian"
-    },
-    {
-        "name": "Радужная Рыбка",
-        "emoji": "🌈",
-        "description": "Яркая тропическая красавица",
-        "min_pnl": 12.0,
-        "max_pnl": 28.0,
-        "rarity": "common",
-        "ai_prompt": "A fish that looks like it fell into a paint mixer, with rainbow colors dripping off it and a confused expression, holding a 'Help I'm a Walking Art Project' sign"
+        "ai_prompt": "Salmon in business suit, presenting charts to fish investors"
     },
 
-    # RARE TIER (10% to 48%)
+    # MEDIUM FISH TIER (10% to 35%) - Decent catches
     {
-        "name": "Алмазный Окунь",
-        "emoji": "🐠",
-        "description": "Красивая рыба с хорошим доходом",
+        "name": "Diplomatic Bass",
+        "emoji": "🤝",
+        "description": "Negotiated its own capture terms",
         "min_pnl": 10.0,
-        "max_pnl": 30.0,
-        "rarity": "rare",
-        "ai_prompt": "A fish completely covered in fake diamonds from a craft store, wearing gaudy jewelry and sunglasses, posing like a rapper and throwing fake money around with zero self-awareness"
+        "max_pnl": 18.0,
+        "rarity": "common",
+        "ai_prompt": "Bass in tiny suit shaking hands with fishing hook"
     },
     {
-        "name": "Благородный Сиг",
-        "emoji": "🐠",
-        "description": "Элитная рыба северных озер",
-        "min_pnl": 15.0,
+        "name": "Philosophical Perch",
+        "emoji": "🤔",
+        "description": "Questions the meaning of being caught",
+        "min_pnl": 12.0,
+        "max_pnl": 20.0,
+        "rarity": "common",
+        "ai_prompt": "Perch with beard, contemplating existential questions"
+    },
+    {
+        "name": "Retired Pike",
+        "emoji": "👴",
+        "description": "Too old for this hunting nonsense",
+        "min_pnl": 14.0,
+        "max_pnl": 22.0,
+        "rarity": "common",
+        "ai_prompt": "Old pike with walking cane and reading glasses"
+    },
+    {
+        "name": "Karaoke Catfish",
+        "emoji": "🎤",
+        "description": "Terrible voice but incredible confidence",
+        "min_pnl": 16.0,
+        "max_pnl": 24.0,
+        "rarity": "common",
+        "ai_prompt": "Catfish holding microphone, mouth wide open, musical notes around"
+    },
+    {
+        "name": "Fashionista Flounder",
+        "emoji": "👗",
+        "description": "Always dressed to impress the ocean floor",
+        "min_pnl": 18.0,
+        "max_pnl": 26.0,
+        "rarity": "common",
+        "ai_prompt": "Flat flounder wearing tiny designer dress and sunglasses"
+    },
+    {
+        "name": "Cryptocurrency Cod",
+        "emoji": "💰",
+        "description": "HODLing seaweed to the moon",
+        "min_pnl": 20.0,
+        "max_pnl": 28.0,
+        "rarity": "common",
+        "ai_prompt": "Cod holding tiny Bitcoin symbol, rocket ship in background"
+    },
+    {
+        "name": "Gourmet Grouper",
+        "emoji": "👨‍🍳",
+        "description": "Rates your bait selection",
+        "min_pnl": 22.0,
+        "max_pnl": 30.0,
+        "rarity": "common",
+        "ai_prompt": "Grouper wearing chef hat, tasting bait with refined expression"
+    },
+    {
+        "name": "Time-Travel Tuna",
+        "emoji": "⏰",
+        "description": "From the year 3024, very confused",
+        "min_pnl": 24.0,
+        "max_pnl": 32.0,
+        "rarity": "common",
+        "ai_prompt": "Tuna wearing futuristic goggles, surrounded by time-warp effects"
+    },
+    {
+        "name": "Superhero Snapper",
+        "emoji": "🦸",
+        "description": "Fighting crime between feeding times",
+        "min_pnl": 26.0,
+        "max_pnl": 34.0,
+        "rarity": "common",
+        "ai_prompt": "Snapper in tiny cape and mask, striking heroic pose"
+    },
+    {
+        "name": "Bookworm Barracuda",
+        "emoji": "📚",
+        "description": "Studied advanced biting techniques",
+        "min_pnl": 28.0,
         "max_pnl": 35.0,
         "rarity": "rare",
-        "ai_prompt": "A fish wearing a powdered wig and formal Victorian attire, holding a teacup with its fin extended in an exaggerated posh manner, looking absolutely ridiculous but taking itself very seriously"
+        "ai_prompt": "Barracuda wearing tiny glasses, reading underwater book"
     },
+
+    # GOOD FISH TIER (30% to 60%) - Solid catches
     {
-        "name": "Лунная Рыба",
-        "emoji": "🌙",
-        "description": "Серебристая красавица ночных вод",
-        "min_pnl": 16.0,
-        "max_pnl": 36.0,
-        "rarity": "rare",
-        "ai_prompt": "A fish wearing a space helmet and tiny astronaut suit, floating in zero gravity with confused expression, holding a sign that says 'How Did I Get Here?' with Earth visible in the background"
-    },
-    {
-        "name": "Изумрудная Щука",
-        "emoji": "💎",
-        "description": "Хищница с драгоценной чешуей",
-        "min_pnl": 18.0,
-        "max_pnl": 42.0,
-        "rarity": "rare",
-        "ai_prompt": "A pike trying to look intimidating but wearing a ridiculous green sequined costume, with jazz hands and a theatrical villain mustache, caught mid-dramatic pose"
-    },
-    {
-        "name": "Янтарная Форель",
-        "emoji": "🧡",
-        "description": "Рыба с чешуей цвета застывшего солнца",
-        "min_pnl": 19.0,
-        "max_pnl": 39.0,
-        "rarity": "rare",
-        "ai_prompt": "A trout that looks like it's made of orange jello, wobbling slightly and looking embarrassed about its gelatinous state, with a 'This is Fine' expression"
-    },
-    {
-        "name": "Королевский Лещ",
-        "emoji": "👑",
-        "description": "Величественная рыба с королевскими повадками",
-        "min_pnl": 20.0,
+        "name": "Executive Mackerel",
+        "emoji": "💼",
+        "description": "Climbed the corporate ladder to your hook",
+        "min_pnl": 30.0,
         "max_pnl": 40.0,
         "rarity": "rare",
-        "ai_prompt": "A fish wearing an oversized plastic Burger King crown and a cape made from a McDonald's napkin, striking a regal pose but looking absolutely ridiculous, with a scepter made from a drinking straw"
+        "ai_prompt": "Mackerel in business suit with briefcase, looking important"
     },
     {
-        "name": "Медная Щука",
-        "emoji": "🔶",
-        "description": "Блестящая хищница медных оттенков",
-        "min_pnl": 21.0,
-        "max_pnl": 41.0,
+        "name": "Rockstar Roughy",
+        "emoji": "🎸",
+        "description": "Shredding guitar solos on the reef",
+        "min_pnl": 32.0,
+        "max_pnl": 42.0,
         "rarity": "rare",
-        "ai_prompt": "A pike that's been spray-painted copper color, with the paint still wet and dripping, wearing safety goggles and holding a 'Wet Paint' sign with a sheepish grin"
+        "ai_prompt": "Orange roughy playing electric guitar, leather jacket"
     },
     {
-        "name": "Сапфировая Скумбрия",
-        "emoji": "💙",
-        "description": "Морская красавица с драгоценной окраской",
-        "min_pnl": 22.0,
-        "max_pnl": 38.0,
+        "name": "Wizard Wahoo",
+        "emoji": "🧙",
+        "description": "Masters the dark arts of speed swimming",
+        "min_pnl": 34.0,
+        "max_pnl": 44.0,
         "rarity": "rare",
-        "ai_prompt": "A mackerel covered in blue glitter and sequins, striking a fashion model pose with one fin on its hip, wearing tiny sunglasses and looking like it belongs on a runway"
+        "ai_prompt": "Wahoo wearing wizard hat and robe, casting speed spells"
     },
     {
-        "name": "Солнечный Судак",
-        "emoji": "☀️",
-        "description": "Светящаяся рыба дневных глубин",
+        "name": "Ninja Needlefish",
+        "emoji": "🥷",
+        "description": "Invisible until it's too late",
+        "min_pnl": 36.0,
+        "max_pnl": 46.0,
+        "rarity": "rare",
+        "ai_prompt": "Needlefish in black ninja outfit, throwing tiny stars"
+    },
+    {
+        "name": "Banker Bluefin",
+        "emoji": "🏦",
+        "description": "Owns half the ocean, still wants more",
+        "min_pnl": 38.0,
+        "max_pnl": 48.0,
+        "rarity": "rare",
+        "ai_prompt": "Bluefin tuna in banker outfit, counting money stacks"
+    },
+    {
+        "name": "Detective Dorado",
+        "emoji": "🕵️",
+        "description": "Solving underwater mysteries",
+        "min_pnl": 40.0,
+        "max_pnl": 50.0,
+        "rarity": "rare",
+        "ai_prompt": "Dorado wearing detective coat and magnifying glass"
+    },
+    {
+        "name": "Professor Pompano",
+        "emoji": "👨‍🏫",
+        "description": "PhD in Advanced Bait Evasion",
+        "min_pnl": 42.0,
+        "max_pnl": 52.0,
+        "rarity": "rare",
+        "ai_prompt": "Pompano with graduation cap, pointing at underwater chalkboard"
+    },
+    {
+        "name": "Captain Kingfish",
+        "emoji": "⚓",
+        "description": "Commands respect on the high seas",
+        "min_pnl": 44.0,
+        "max_pnl": 54.0,
+        "rarity": "rare",
+        "ai_prompt": "Kingfish in captain's hat with tiny ship wheel"
+    },
+    {
+        "name": "Artist Angelfish",
+        "emoji": "🎨",
+        "description": "Paints abstract coral masterpieces",
+        "min_pnl": 46.0,
+        "max_pnl": 56.0,
+        "rarity": "rare",
+        "ai_prompt": "Angelfish with tiny beret, holding paintbrush and palette"
+    },
+    {
+        "name": "Surgeon Swordfish",
+        "emoji": "⚕️",
+        "description": "Performs precision operations",
+        "min_pnl": 48.0,
+        "max_pnl": 58.0,
+        "rarity": "rare",
+        "ai_prompt": "Swordfish in surgical mask, sword gleaming like scalpel"
+    },
+    {
+        "name": "Empress Escolar",
+        "emoji": "👑",
+        "description": "Royalty of the deep blue realm",
+        "min_pnl": 50.0,
+        "max_pnl": 60.0,
+        "rarity": "rare",
+        "ai_prompt": "Escolar wearing elaborate crown and royal robes"
+    },
+
+    # EXCELLENT FISH TIER (55% to 100%) - Great catches
+    {
+        "name": "Champion Cobia",
+        "emoji": "🏆",
+        "description": "Won gold in underwater Olympics",
+        "min_pnl": 55.0,
+        "max_pnl": 70.0,
+        "rarity": "epic",
+        "ai_prompt": "Cobia holding gold medal, standing on podium underwater"
+    },
+    {
+        "name": "Millionaire Marlin",
+        "emoji": "💎",
+        "description": "Made it big in the algae business",
+        "min_pnl": 60.0,
+        "max_pnl": 80.0,
+        "rarity": "epic",
+        "ai_prompt": "Blue marlin in top hat with monocle, swimming in gold coins"
+    },
+    {
+        "name": "Galactic Grouper",
+        "emoji": "🛸",
+        "description": "Visiting from another ocean planet",
+        "min_pnl": 65.0,
+        "max_pnl": 85.0,
+        "rarity": "epic",
+        "ai_prompt": "Grouper in tiny space helmet with UFO in background"
+    },
+    {
+        "name": "Dragon Emperor Eel",
+        "emoji": "🐉",
+        "description": "Ancient ruler of the abyssal depths",
+        "min_pnl": 70.0,
+        "max_pnl": 90.0,
+        "rarity": "epic",
+        "ai_prompt": "Massive eel with dragon features, breathing underwater fire"
+    },
+    {
+        "name": "Phoenix Flounder",
+        "emoji": "🔥",
+        "description": "Rises from the seafloor like a legend",
+        "min_pnl": 75.0,
+        "max_pnl": 95.0,
+        "rarity": "epic",
+        "ai_prompt": "Flounder surrounded by underwater flames, majestic pose"
+    },
+    {
+        "name": "Crystal Catfish",
+        "emoji": "💎",
+        "description": "Transparent beauty of pure waters",
+        "min_pnl": 80.0,
+        "max_pnl": 100.0,
+        "rarity": "epic",
+        "ai_prompt": "Transparent catfish sparkling like crystal, rainbow reflections"
+    },
+
+    # LEGENDARY TIER (90% to 300%) - Mythical catches
+    {
+        "name": "Quantum Shark",
+        "emoji": "⚛️",
+        "description": "Exists in multiple dimensions simultaneously",
+        "min_pnl": 90.0,
+        "max_pnl": 150.0,
+        "rarity": "legendary",
+        "ai_prompt": "Shark flickering between dimensions, mathematical equations around it"
+    },
+    {
+        "name": "Cosmic Whale",
+        "emoji": "🌌",
+        "description": "Carries entire galaxies in its belly",
+        "min_pnl": 100.0,
+        "max_pnl": 180.0,
+        "rarity": "legendary",
+        "ai_prompt": "Massive whale with stars and nebulas visible inside transparent body"
+    },
+    {
+        "name": "Time Lord Sturgeon",
+        "emoji": "⏳",
+        "description": "Controls the flow of underwater time",
+        "min_pnl": 110.0,
+        "max_pnl": 200.0,
+        "rarity": "legendary",
+        "ai_prompt": "Ancient sturgeon with clock gears floating around, time distortions"
+    },
+    {
+        "name": "Rainbow Leviathan",
+        "emoji": "🌈",
+        "description": "Mythical beast of all ocean colors",
+        "min_pnl": 120.0,
+        "max_pnl": 220.0,
+        "rarity": "legendary",
+        "ai_prompt": "Massive sea creature with rainbow-colored scales, aurora effects"
+    },
+    {
+        "name": "Dimensional Drifter",
+        "emoji": "🌀",
+        "description": "Swims between parallel ocean realities",
+        "min_pnl": 130.0,
+        "max_pnl": 240.0,
+        "rarity": "legendary",
+        "ai_prompt": "Fish phasing through portal between different underwater worlds"
+    },
+    {
+        "name": "Ocean Oracle",
+        "emoji": "🔮",
+        "description": "Knows the future of all fishing expeditions",
+        "min_pnl": 140.0,
+        "max_pnl": 260.0,
+        "rarity": "legendary",
+        "ai_prompt": "Mystical fish surrounded by crystal balls showing fishing futures"
+    },
+    {
+        "name": "Infinity Kraken",
+        "emoji": "♾️",
+        "description": "Has tentacles in every possible timeline",
+        "min_pnl": 150.0,
+        "max_pnl": 280.0,
+        "rarity": "legendary",
+        "ai_prompt": "Kraken with tentacles extending into multiple dimensions"
+    },
+    {
+        "name": "Godfish Supreme",
+        "emoji": "✨",
+        "description": "The deity of all aquatic realms",
+        "min_pnl": 200.0,
+        "max_pnl": 300.0,
+        "rarity": "legendary",
+        "ai_prompt": "Glowing divine fish with halo and celestial aura, other fish bowing"
+    },
+
+    # BONUS ABSURD CATCHES (mixed PnL for variety)
+    {
+        "name": "Confused Lobster",
+        "emoji": "🦞",
+        "description": "Thought it was a fish, got an identity crisis",
+        "min_pnl": -5.0,
+        "max_pnl": 15.0,
+        "rarity": "common",
+        "ai_prompt": "Lobster wearing fish costume, looking very confused"
+    },
+    {
+        "name": "Vegan Shark",
+        "emoji": "🌱",
+        "description": "Only eats seaweed, very disappointed in itself",
         "min_pnl": 25.0,
         "max_pnl": 45.0,
         "rarity": "rare",
-        "ai_prompt": "A pike wearing a light bulb costume that's actually glowing, with a confused expression and an extension cord trailing behind it, clearly not understanding how electricity works"
+        "ai_prompt": "Shark eating salad underwater, looking guilty about lifestyle choice"
     },
     {
-        "name": "Мистический Сом",
-        "emoji": "🔮",
-        "description": "Загадочный обитатель глубин с магическими свойствами",
-        "min_pnl": 28.0,
-        "max_pnl": 48.0,
-        "rarity": "rare",
-        "ai_prompt": "A catfish wearing a wizard hat and fake beard, holding a crystal ball made from a fishbowl, with mystical sparkles around it that are obviously just glitter from a craft store"
+        "name": "Unemployed Tuna",
+        "emoji": "📄",
+        "description": "Lost its job at the sushi restaurant",
+        "min_pnl": -10.0,
+        "max_pnl": 10.0,
+        "rarity": "common",
+        "ai_prompt": "Tuna holding resume and wearing tie, looking hopeful"
     },
-  {
-    "name": "Апрувнутый Спам-Бот",
-    "emoji": "🤖",
-    "description": "Зацепился за крючок и сразу попросил KYC",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Janky robot half-submerged, holding 'verify wallet' pop-up like a fishing lure"
-  },
-  {
-    "name": "Фантик от Мемкоина",
-    "emoji": "🧻",
-    "description": "Поймал фантик, а все кричат — это будущий миллион",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Crumpled candy wrapper with token logo eyes, floating proudly like treasure"
-  },
-  {
-    "name": "Крипто-Бегемот",
-    "emoji": "🦛",
-    "description": "Вылез из болотного пула ликвидности, весь в стейблах",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon hippo in DeFi pool float, coins stuck to its skin, goofy grin"
-  },
-  {
-    "name": "NFT-Обезьяна",
-    "emoji": "🙈",
-    "description": "Поймал на банан, орёт что floor уже x2",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon ape in pixelated sunglasses holding banana phone, shouting excitedly"
-  },
-  {
-    "name": "Газовый Смурфик",
-    "emoji": "🧑‍🔧",
-    "description": "Маленький, но дерёт комиссию за каждый пузырёк",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Tiny smurf-like character in mechanic outfit with gas pump hose tail"
-  },
-  {
-    "name": "Ликвидити-Желе",
-    "emoji": "🍮",
-    "description": "Тряслось на дне и внезапно прилипло к крючку",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Wobbly jelly dessert with swimming goggles and fins, bright neon colors"
-  },
-  {
-    "name": "Фомо-Фантом",
-    "emoji": "👻",
-    "description": "Мелькнул и пропал, но ты уже вкинулся за ним",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Goofy ghost with rocket tattoo, disappearing into bubbles, cheeky grin"
-  },
-  {
-    "name": "Шил-Гоблин",
-    "emoji": "🧌",
-    "description": "Орал из-под воды «бери на дне», пока сам не попался",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon goblin with bags of tokens in hands, wide manic smile"
-  },
-  {
-    "name": "Скам-Лягушка",
-    "emoji": "🐸",
-    "description": "Обещала APY 9000%, а внутри пусто",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon frog wearing banker suit, hollow chest with '0%' inside"
-  },
-  {
-    "name": "Мемная Уточка",
-    "emoji": "🦆",
-    "description": "Крякала «wen moon?» и крутилась на месте",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Yellow duck with rocket strapped to back, crazy eyes, silly pose"
-  },
-  {
-    "name": "Ордерная Кальмариха",
-    "emoji": "🦑",
-    "description": "Расставила сетку ордеров прямо на твоём садке",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon squid with trading chart tentacles, laying limit orders as traps"
-  },
-  {
-    "name": "Понзи-Краб",
-    "emoji": "🦀",
-    "description": "Каждый его клык держал ещё одного краба",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Crab pyramid scheme: small crabs stacked under it, smug expression"
-  },
-  {
-    "name": "Апвоут-Картофель",
-    "emoji": "🥔",
-    "description": "Всплыл сам и попросил лайк на реддите",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Potato with fins and big reddit upvote arrow sticking out of head"
-  },
-  {
-    "name": "Ректо-Кот",
-    "emoji": "🐱",
-    "description": "Вытащил — а он орёт капслоком и показывает пустой кошелек",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Angry cat with empty wallet in paws, cartoon tears, dramatic pose"
-  },
-  {
-    "name": "Топ-Гейнер Голубь",
-    "emoji": "🕊️",
-    "description": "Подлетел, поклевал червя и сразу улетел на 300%",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Cartoon pigeon with rocket sneakers, smug moon gaze"
-  },
-  {
-    "name": "Суши-Смартконтракт",
-    "emoji": "🍣",
-    "description": "Запутался в коде и сам себя вытащил на берег",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Piece of sushi with blockchain code wrapping like nori, goofy happy face"
-  },
-  {
-    "name": "Гига-Шорт Медведь",
-    "emoji": "🐻",
-    "description": "Поймал прямо в момент ликвидации, визжал от боли",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Bear in ripped shorts, margin call screen behind, silly desperate face"
-  },
-  {
-    "name": "Кукл-Марионетка",
-    "emoji": "🪆",
-    "description": "Вылез с нитками, дергает ордера туда-сюда",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Puppet doll fish with strings attached to invisible hands, goofy crooked smile"
-  },
-  {
-    "name": "Айрдропный Голубец",
-    "emoji": "🥬",
-    "description": "Прилетел завернутый в капустный лист, бесплатно и бессмысленно",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Stuffed cabbage roll with fins, cartoon parachute above"
-  },
-  {
-    "name": "Деген-Русалка",
-    "emoji": "🧜‍♀️",
-    "description": "Курила вейп и обещала x100, пока её не вытащили",
-    "min_pnl": -0.4,
-    "max_pnl": 0.4,
-    "rarity": "rare",
-    "ai_prompt": "Mermaid with degenerate gamer hoodie, vape cloud, crazed eyes"
-  },
-
-    # EPIC TIER (30% to 80%)
     {
-        "name": "Акула Профита",
-        "emoji": "🦈",
-        "description": "Мощный хищник, приносящий отличную прибыль",
+        "name": "Social Media Stingray",
+        "emoji": "📸",
+        "description": "Only moves for Instagram-worthy shots",
+        "min_pnl": 15.0,
+        "max_pnl": 35.0,
+        "rarity": "common",
+        "ai_prompt": "Stingray posing dramatically, ring light attached to its tail"
+    },
+    {
+        "name": "Retirement Fund Bass",
+        "emoji": "👴",
+        "description": "Swimming slow to make its 401k last",
         "min_pnl": 30.0,
         "max_pnl": 50.0,
-        "rarity": "epic",
-        "ai_prompt": "A shark wearing a business suit and tie, holding a briefcase full of monopoly money, with dollar sign eyes and a calculator in its other fin, looking like a wall street predator literally"
+        "rarity": "rare",
+        "ai_prompt": "Old bass counting coins, calculator and reading glasses"
     },
     {
-        "name": "Драконья Рыба",
-        "emoji": "🔥",
-        "description": "Огненная хищница вулканических вод",
-        "min_pnl": 35.0,
+        "name": "WiFi Router Ray",
+        "emoji": "📡",
+        "description": "Providing underwater internet, connection unstable",
+        "min_pnl": 5.0,
+        "max_pnl": 25.0,
+        "rarity": "common",
+        "ai_prompt": "Stingray with WiFi antennas, signal bars floating around"
+    },
+    {
+        "name": "Landlord Leviathan",
+        "emoji": "🏠",
+        "description": "Renting out coral real estate at inflated prices",
+        "min_pnl": 75.0,
+        "max_pnl": 125.0,
+        "rarity": "epic",
+        "ai_prompt": "Massive sea creature with 'For Rent' signs on its back"
+    },
+    {
+        "name": "Tax Evading Swordfish",
+        "emoji": "📋",
+        "description": "Hasn't filed returns since 2019",
+        "min_pnl": 20.0,
+        "max_pnl": 40.0,
+        "rarity": "rare",
+        "ai_prompt": "Swordfish running away from IRS forms floating underwater"
+    },
+    {
+        "name": "Motivational Speaker Manta",
+        "emoji": "📢",
+        "description": "Believes in you more than you believe in yourself",
+        "min_pnl": 50.0,
         "max_pnl": 70.0,
         "rarity": "epic",
-        "ai_prompt": "A fish wearing a dragon costume from a Halloween store, with cardboard wings and a party store dragon head, breathing actual fire but looking surprised that it worked"
+        "ai_prompt": "Manta ray on tiny stage with microphone, giving inspirational speech"
     },
     {
-        "name": "Призрачный Скат",
-        "emoji": "👻",
-        "description": "Прозрачный обитатель потусторонних вод",
-        "min_pnl": 38.0,
-        "max_pnl": 68.0,
-        "rarity": "epic",
-        "ai_prompt": "A manta ray wearing a bedsheet ghost costume that's too small for it, with holes cut out for eyes but they're in the wrong places, looking confused and spooky at the same time"
-    },
-    {
-        "name": "Ледяной Левиафан",
-        "emoji": "🧊",
-        "description": "Древний властелин замерзших глубин",
-        "min_pnl": 40.0,
-        "max_pnl": 80.0,
-        "rarity": "epic",
-        "ai_prompt": "A massive fish frozen in a giant ice cube, with its eyes wide open and a 'help me' expression, holding a tiny sign that says 'This is Not What I Ordered' visible through the ice"
-    },
-    {
-        "name": "Кристальная Барракуда",
-        "emoji": "💎",
-        "description": "Прозрачная хищница с алмазными зубами",
-        "min_pnl": 42.0,
-        "max_pnl": 78.0,
-        "rarity": "epic",
-        "ai_prompt": "A transparent barracuda you can see through, but it's wearing visible underwear underneath, looking embarrassed about being caught in this state with a 'Privacy Please' sign"
-    },
-    {
-        "name": "Грозовая Мурена",
-        "emoji": "⚡",
-        "description": "Электрическая хищница штормовых морей",
-        "min_pnl": 45.0,
-        "max_pnl": 75.0,
-        "rarity": "epic",
-        "ai_prompt": "An eel that's actually just a power cable that gained consciousness, with a plug for a tail and sparks coming off it, wearing safety goggles and an 'OSHA Violation' warning label"
-    },
-    {
-        "name": "Титановая Акула",
-        "emoji": "🦾",
-        "description": "Механический хищник будущего",
-        "min_pnl": 50.0,
+        "name": "Cryptocurrency Crab",
+        "emoji": "💰",
+        "description": "Diamond claws, hodling to the seafloor",
+        "min_pnl": 35.0,
         "max_pnl": 85.0,
+        "rarity": "rare",
+        "ai_prompt": "Crab made of diamonds, holding crypto coins in claws"
+    },
+    {
+        "name": "Identity Thief Octopus",
+        "emoji": "🎭",
+        "description": "Pretending to be eight different fish",
+        "min_pnl": 40.0,
+        "max_pnl": 60.0,
         "rarity": "epic",
-        "ai_prompt": "A shark made from kitchen appliances and car parts held together with duct tape, with a toaster for a head and windshield wipers for fins, looking proud of this janky DIY cyborg transformation"
-    },
-
-    # LEGENDARY TIER (50% to 300%)
-    {
-        "name": "Легендарный Кит",
-        "emoji": "🐋",
-        "description": "Мифический гигант океанских глубин",
-        "min_pnl": 50.0,
-        "max_pnl": 100.0,
-        "rarity": "legendary",
-        "ai_prompt": "A whale wearing a fake mustache and top hat, trying to disguise itself as a gentleman, but failing because it's obviously still a massive whale, holding a tiny umbrella for scale"
+        "ai_prompt": "Octopus wearing eight different masks on its tentacles"
     },
     {
-        "name": "Ледяная Принцесса",
-        "emoji": "❄️",
-        "description": "Мистическое создание ледяных глубин",
-        "min_pnl": 60.0,
-        "max_pnl": 120.0,
-        "rarity": "legendary",
-        "ai_prompt": "A fish wearing a plastic tiara from a dollar store and a tutu, posing dramatically like a ballet dancer but looking absolutely ridiculous, with fake eyelashes and way too much makeup"
-    },
-    {
-        "name": "Лунный Единорог",
-        "emoji": "🦄",
-        "description": "Мифическое существо лунных прудов",
-        "min_pnl": 70.0,
-        "max_pnl": 200.0,
-        "rarity": "legendary",
-        "ai_prompt": "A fish with a traffic cone stuck on its head pretending to be a unicorn horn, with rainbow stickers all over it and a 'My Little Pony' expression, totally convinced it's magical"
-    },
-    {
-        "name": "Золотой Дракон",
-        "emoji": "🐲",
-        "description": "Редчайшая рыба из вулканических источников",
-        "min_pnl": 80.0,
-        "max_pnl": 150.0,
-        "rarity": "legendary",
-        "ai_prompt": "A fish spray-painted gold wearing plastic dragon wings from a toy store, breathing fire from a novelty lighter, looking extremely pleased with its discount costume store transformation"
-    },
-    {
-        "name": "Временной Осетр",
-        "emoji": "⏰",
-        "description": "Древняя рыба, управляющая потоками времени",
-        "min_pnl": 80.0,
-        "max_pnl": 180.0,
-        "rarity": "legendary",
-        "ai_prompt": "A sturgeon wearing multiple wristwatches on all its fins and a clock for a hat, looking confused about what time it is, surrounded by alarm clocks all showing different times"
-    },
-    {
-        "name": "Радужный Дракон",
-        "emoji": "🌈",
-        "description": "Мифическое создание всех стихий",
-        "min_pnl": 85.0,
-        "max_pnl": 190.0,
-        "rarity": "legendary",
-        "ai_prompt": "A fish that looks like it exploded in a paint factory, with paint buckets attached to its fins and a paint roller for a tail, creating chaos while trying to be majestic"
-    },
-    {
-        "name": "Феникс-Рыба",
-        "emoji": "🔥",
-        "description": "Бессмертная рыба огненного возрождения",
+        "name": "Extinct Dodo Fish",
+        "emoji": "🦤",
+        "description": "Somehow survived by staying underwater",
         "min_pnl": 90.0,
         "max_pnl": 200.0,
         "rarity": "legendary",
-        "ai_prompt": "A fish wearing phoenix costume wings from a school play, with cardboard flames around it and a 'Reborn Again!' banner, looking overly dramatic about its budget resurrection"
+        "ai_prompt": "Dodo bird with fish tail, looking very out of place underwater"
     },
     {
-        "name": "Космический Кит",
-        "emoji": "🌌",
-        "description": "Межгалактический гигант звездных просторов",
-        "min_pnl": 100.0,
-        "max_pnl": 250.0,
-        "rarity": "legendary",
-        "ai_prompt": "A whale wearing a cardboard space suit with christmas lights glued all over it to look like stars, floating in what's obviously a kiddie pool painted black with glow-in-the-dark stickers"
+        "name": "Self-Help Guru Grouper",
+        "emoji": "📖",
+        "description": "Wrote 'The 7 Habits of Highly Effective Fish'",
+        "min_pnl": 45.0,
+        "max_pnl": 65.0,
+        "rarity": "rare",
+        "ai_prompt": "Grouper wearing glasses, holding self-help book underwater"
     },
     {
-        "name": "Божественный Левиафан",
-        "emoji": "✨",
-        "description": "Создание высших сил океанских глубин",
-        "min_pnl": 120.0,
-        "max_pnl": 300.0,
-        "rarity": "legendary",
-        "ai_prompt": "A massive fish wearing a halo made from a paper plate and feather wings from a craft store, holding a harp made from rubber bands, trying to look holy but mostly looking like a craft project gone wrong"
+        "name": "Flat Earth Flounder",
+        "emoji": "🌍",
+        "description": "Ironically proves the ocean floor is flat",
+        "min_pnl": 15.0,
+        "max_pnl": 25.0,
+        "rarity": "common",
+        "ai_prompt": "Flat flounder holding tiny flat earth sign, looking convinced"
+    },
+    {
+        "name": "Uber Driver Urchin",
+        "emoji": "🚗",
+        "description": "Five stars, spiky ride",
+        "min_pnl": 8.0,
+        "max_pnl": 18.0,
+        "rarity": "common",
+        "ai_prompt": "Sea urchin with tiny taxi light, wearing driver's cap"
+    },
+    {
+        "name": "Life Coach Lungfish",
+        "emoji": "🫁",
+        "description": "Helps you breathe through difficult times",
+        "min_pnl": 30.0,
+        "max_pnl": 50.0,
+        "rarity": "rare",
+        "ai_prompt": "Lungfish in suit, teaching breathing exercises to other fish"
+    },
+    {
+        "name": "Dream Analyst Dreamfish",
+        "emoji": "💭",
+        "description": "Interprets your fishing nightmares",
+        "min_pnl": 35.0,
+        "max_pnl": 55.0,
+        "rarity": "rare",
+        "ai_prompt": "Ethereal fish surrounded by dream bubbles and sleep imagery"
+    },
+    {
+        "name": "Meditation App Monk Fish",
+        "emoji": "🧘‍♂️",
+        "description": "Offers premium mindfulness for $9.99/month",
+        "min_pnl": 25.0,
+        "max_pnl": 45.0,
+        "rarity": "rare",
+        "ai_prompt": "Monkfish in robes, surrounded by meditation app interface"
+    },
+    {
+        "name": "Vintage Vinyl Viperfish",
+        "emoji": "💿",
+        "description": "Collects rare deep-sea recordings",
+        "min_pnl": 55.0,
+        "max_pnl": 75.0,
+        "rarity": "epic",
+        "ai_prompt": "Viperfish with record collection, vintage headphones around neck"
+    },
+    {
+        "name": "Haunted House Hagfish",
+        "emoji": "🏚️",
+        "description": "Lives in underwater Victorian mansion",
+        "min_pnl": 40.0,
+        "max_pnl": 80.0,
+        "rarity": "epic",
+        "ai_prompt": "Hagfish in spooky underwater mansion, ghost effects around"
     }
 ]

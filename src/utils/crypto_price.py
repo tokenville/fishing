@@ -100,8 +100,8 @@ def calculate_dollar_pnl(entry_price, exit_price, leverage=2.0, stake_usd=1000.0
     return dollar_pnl
 
 
-def format_time_fishing(entry_time):
-    """Format time spent fishing"""
+def get_fishing_time_seconds(entry_time):
+    """Get fishing time in seconds"""
     try:
         from datetime import datetime, timezone
         
@@ -125,12 +125,22 @@ def format_time_fishing(entry_time):
             entry_dt = entry_dt.replace(tzinfo=None)
         
         diff = now - entry_dt
-        
         total_seconds = int(diff.total_seconds())
         
         # Ensure we don't show negative time
         if total_seconds < 0:
             total_seconds = 0
+            
+        return total_seconds
+        
+    except Exception as e:
+        print(f"Error calculating time seconds: {e}")
+        return 0
+
+def format_time_fishing(entry_time):
+    """Format time spent fishing"""
+    try:
+        total_seconds = get_fishing_time_seconds(entry_time)
         
         if total_seconds < 60:
             return f"{total_seconds}с"
