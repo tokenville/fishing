@@ -108,6 +108,30 @@ async def cleanup_rate_limits():
         for user_id in to_remove:
             del _user_rate_limits[user_id]
 
+async def reset_database():
+    """Drop all tables and recreate them - USE WITH CAUTION"""
+    pool = await get_pool()
+    
+    async with pool.acquire() as conn:
+        # Drop all tables in correct order (reverse dependency)
+        tables_to_drop = [
+            'group_memberships',
+            'fish_images', 
+            'user_rods', 
+            'positions', 
+            'user_settings',
+            'fish', 
+            'rods', 
+            'ponds', 
+            'users'
+        ]
+        
+        for table in tables_to_drop:
+            await conn.execute(f'DROP TABLE IF EXISTS {table} CASCADE')
+            logger.info(f"Dropped table: {table}")
+        
+        logger.info("Database reset completed - all tables dropped")
+
 async def init_database():
     """Initialize the database with required tables"""
     pool = await get_pool()
