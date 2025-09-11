@@ -23,6 +23,12 @@ _rate_limit_lock = asyncio.Lock()
 RATE_LIMIT_COMMANDS = 10  # Max commands per minute
 RATE_LIMIT_WINDOW = 60  # Window in seconds
 
+# Hook-specific rate limiting (more restrictive)
+HOOK_RATE_LIMIT_COMMANDS = 3  # Max 3 hook attempts per minute  
+HOOK_RATE_LIMIT_WINDOW = 60  # Window in seconds
+_hook_rate_limits = {}  # user_id -> list of timestamps
+_hook_rate_limit_lock = asyncio.Lock()
+
 async def get_pool() -> asyncpg.Pool:
     """Get or create connection pool optimized for high load with thread safety"""
     global _pool
@@ -90,6 +96,44 @@ async def check_rate_limit(user_id: int) -> bool:
         _user_rate_limits[user_id] = user_history
         
         return True
+
+async def check_hook_rate_limit(user_id: int) -> bool:
+    """Check if user has exceeded hook-specific rate limit
+    
+    Hook commands are more resource-intensive (animation + API calls)
+    so they have stricter limits than regular commands.
+    
+    Returns:
+        True if user can proceed, False if rate limited
+    """
+    async with _hook_rate_limit_lock:
+        now = time.time()
+        user_history = _hook_rate_limits.get(user_id, [])
+        
+        # Clean old entries outside the window
+        user_history = [t for t in user_history if now - t < HOOK_RATE_LIMIT_WINDOW]
+        
+        # Check if exceeds hook-specific limit (more restrictive)
+        if len(user_history) >= HOOK_RATE_LIMIT_COMMANDS:
+            return False
+        
+        # Add current request
+        user_history.append(now)
+        _hook_rate_limits[user_id] = user_history
+        
+        return True
+
+async def cleanup_hook_rate_limits():
+    """Cleanup old hook rate limit entries (run periodically)"""
+    async with _hook_rate_limit_lock:
+        now = time.time()
+        for user_id in list(_hook_rate_limits.keys()):
+            history = _hook_rate_limits[user_id]
+            cleaned = [t for t in history if now - t < HOOK_RATE_LIMIT_WINDOW]
+            if cleaned:
+                _hook_rate_limits[user_id] = cleaned
+            else:
+                del _hook_rate_limits[user_id]
 
 async def cleanup_rate_limits():
     """Cleanup old rate limit entries (run periodically)"""

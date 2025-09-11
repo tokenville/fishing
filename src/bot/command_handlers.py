@@ -13,11 +13,11 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from src.database.db_manager import (
     get_user, create_user, get_active_position, close_position, use_bait, create_position_with_gear,
     ensure_user_has_level, give_starter_rod, get_user_rods, get_pond_by_id,
-    get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit,
+    get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit, check_hook_rate_limit,
     get_user_virtual_balance, get_flexible_leaderboard,
     get_group_pond_by_chat_id, get_user_group_ponds, add_user_to_group
 )
-from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing, get_fishing_time_seconds
+from src.utils.crypto_price import get_crypto_price, calculate_pnl, get_pnl_color, format_time_fishing, get_fishing_time_seconds, get_price_error_message
 from src.bot.message_templates import (
     get_help_text,
     format_no_fishing_status, format_new_user_status,
@@ -177,10 +177,16 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug(f"HOOK command called by user {user_id} ({username})")
     
     try:
-        # Check rate limit
+        # Check general rate limit
         if not await check_rate_limit(user_id):
             await safe_reply(update, "⏳ Too many requests! Wait a bit before the next command.")
             return
+            
+        # Check hook-specific rate limit (more restrictive)
+        if not await check_hook_rate_limit(user_id):
+            await safe_reply(update, "🎣 Easy there, fisherman! Hook attempts are limited to prevent spam.\n\n<i>Max 3 hook attempts per minute. Give the fish a chance to bite! 🐟</i>")
+            return
+            
         # Check if user is fishing
         position = await get_active_position(user_id)
         
@@ -192,35 +198,64 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pond = await get_pond_by_id(position['pond_id']) if position['pond_id'] else None
         rod = await get_rod_by_id(position['rod_id']) if position['rod_id'] else None
         
-        # Get base currency and calculate P&L with leverage
+        # Get base currency for price fetching
         base_currency = pond['base_currency'] if pond else 'ETH'
         leverage = rod['leverage'] if rod else 1.5
-        
-        current_price = await get_crypto_price(base_currency)
         entry_price = position['entry_price']
         
-        # Calculate P&L with leverage
+        # Pre-calculate time for quick fishing check (no API call needed)
         time_fishing = format_time_fishing(position['entry_time'])
         fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
-        pnl_percent = calculate_pnl(entry_price, current_price, leverage)
         
-        # Check for quick fishing with minimal PnL
-        if fishing_time_seconds < 60 and abs(pnl_percent) < 0.1:
-            quick_message = get_quick_fishing_message(fishing_time_seconds)
-            remaining_time = 60 - fishing_time_seconds
-            await safe_reply(update, f"{quick_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n📈 <b>P&L:</b> {pnl_percent:+.4f}%\n\n<i>Wait at least {remaining_time} more seconds (minimum 1 minute total) for the market to move!</i>")
-            return
+        # QUICK FISHING CHECK - must be done BEFORE animation starts!
+        if fishing_time_seconds < 60:
+            # We need a quick price check to see if P&L is minimal
+            try:
+                quick_price = await get_crypto_price(base_currency)
+                quick_pnl = calculate_pnl(entry_price, quick_price, leverage)
+                
+                if abs(quick_pnl) < 0.1:
+                    quick_message = get_quick_fishing_message(fishing_time_seconds)
+                    await safe_reply(update, f"{quick_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n📈 <b>P&L:</b> {quick_pnl:+.4f}%\n\n<i>Wait at least 1 minute for the market to move!</i>")
+                    return
+            except Exception as e:
+                logger.warning(f"Quick fishing check failed, allowing hook anyway: {e}")
+                # If price check fails, allow fishing to continue
         
         # Get user level
         user = await get_user(user_id)
         user_level = user['level'] if user else 1
         
-        # Start the hook animation IMMEDIATELY (this runs for 12.5 seconds)
+        # Start PARALLEL tasks immediately - no blocking!
+        # 1. Hook animation (12.5 seconds)
         hook_task = asyncio.create_task(
             animate_hook_sequence(update.message, username)
         )
         
-        # Start generating the fish card IN PARALLEL (this takes ~12 seconds)
+        # 2. Price fetching with retry (may take up to 9+ seconds)
+        async def fetch_price_and_calculate():
+            try:
+                current_price = await get_crypto_price(base_currency)
+                pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+                return current_price, pnl_percent
+            except Exception as e:
+                logger.error(f"Price fetch failed in hook: {e}")
+                return "ERROR", None
+                
+        price_task = asyncio.create_task(fetch_price_and_calculate())
+        
+        # Wait for price calculation to complete (runs in parallel with animation)
+        current_price, pnl_percent = await price_task
+        
+        # Handle price fetch failure
+        if current_price == "ERROR":
+            # Price fetch failed - wait for animation to complete and show game error
+            animation_message = await hook_task
+            error_message = get_price_error_message()
+            await safe_reply(update, f"{error_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n\n<i>Try pulling the hook again!</i>")
+            return
+        
+        # Normal fishing - proceed with fish selection and generation
         # The database-driven fish selection with weighted rarity system
         fish_data = await get_suitable_fish(
             pnl_percent, 
@@ -254,7 +289,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 user_level=user_level
             )
             
-            # Start generating the image while animation is playing
+            # Start generating the image while animation continues
             card_task = asyncio.create_task(
                 generate_fish_card_from_db(fish_data)
             )
@@ -387,7 +422,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         start_message = f"""<b>🎣 Welcome to Big Catchy, {username}!</b>
 
-<b>Dex trading x Fishing!</b>
+<b>DEX trading meets fishing!</b>
 Make leveraged trades and catch fish based on your performance - from trash catches to legendary sea monsters!
 
 <b>🎮 How it works:</b>
@@ -406,9 +441,8 @@ Make leveraged trades and catch fish based on your performance - from trash catc
 <b>🎣 Quick Commands:</b>
 - /cast - Start fishing (make trade)
 - /hook - Close position & see catch
-- /aquarium - View your fish collection
 - /leaderboard - Top fishermen
-- /help - Full guide
+- /help - This guide
 
 <b>🐟 Your catches depend on trading results:</b>
 🗑️ Losses = Trash (soggy pizza, broken dreams)
@@ -430,7 +464,7 @@ Make leveraged trades and catch fish based on your performance - from trash catc
         try:
             keyboard = [[
                 InlineKeyboardButton(
-                    "🎮 Открыть игру", 
+                    "🎮 Open Miniapp", 
                     web_app=WebAppInfo(url=webapp_url)
                 )
             ]]

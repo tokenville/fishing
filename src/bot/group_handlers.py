@@ -12,7 +12,7 @@ from src.database.db_manager import (
     add_user_to_group, remove_user_from_group,
     update_group_member_count, get_user, create_user
 )
-from src.bot.animations import safe_reply
+from src.bot.animations import safe_reply, safe_send_message
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +60,12 @@ async def my_chat_member_handler(update: Update, context: ContextTypes.DEFAULT_T
 • Use /cast to throw your fishing rod
 • Use /hook to catch the fish
 • Use /status to check your progress
+• Use /leaderboard to check group stats
+• DM bot for more controls
 
-<i>The more members in your group, the more trading pairs become available!</i>
-
-Join this pond by using commands here in the group!"""
+<i>The more members in your group, the more trading pairs become available!</i>"""
             
-            await safe_reply(update, welcome_msg)
+            await safe_send_message(context, chat.id, welcome_msg)
             
         # Bot was removed from the group
         elif (new_member.status in ['left', 'kicked'] and 

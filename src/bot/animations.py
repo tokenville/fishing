@@ -35,6 +35,22 @@ async def safe_reply(update, text: str, max_retries: int = 3) -> None:
                 logger.warning(f"Attempt {attempt + 1} failed, retrying: {e}")
                 await asyncio.sleep(1)
 
+async def safe_send_message(context, chat_id: int, text: str, max_retries: int = 3) -> None:
+    """Safely send message to chat with retry logic (for cases without original message)"""
+    for attempt in range(max_retries):
+        try:
+            logger.debug(f"safe_send_message attempt {attempt + 1}: sending message to chat {chat_id}")
+            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+            logger.debug(f"safe_send_message successful on attempt {attempt + 1}")
+            return
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Failed to send message after {max_retries} attempts: {e}")
+                logger.exception("Full safe_send_message error traceback:")
+            else:
+                logger.warning(f"Attempt {attempt + 1} failed, retrying: {e}")
+                await asyncio.sleep(1)
+
 async def safe_reply_photo(update, photo_data: bytes, caption: str, max_retries: int = 3) -> None:
     """Safely send photo with retry logic"""
     for attempt in range(max_retries):

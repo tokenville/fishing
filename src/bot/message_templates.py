@@ -290,11 +290,11 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
     
     return (
         f"This is {catch_story}\n\n"
+        f"💰 <b>PnL: {dollar_str} ({pnl_str})</b>\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
         f"Pond: {pond_name} ({pond_pair})\n"
         f"Fishing time: <b>{time_fishing}</b>\n"
-        f"Position: ${entry_price:.2f} → ${current_price:.2f}\n"
-        f"PnL: <b>{pnl_str} ({dollar_str})</b>\n\n"
+        f"Position: ${entry_price:.2f} → ${current_price:.2f}\n\n"
         f"🚀 Use /cast to start fishing!"
     )
 
