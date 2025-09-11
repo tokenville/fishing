@@ -11,13 +11,26 @@ logger = logging.getLogger(__name__)
 
 async def safe_reply(update, text: str, max_retries: int = 3) -> None:
     """Safely send message with retry logic"""
+    logger.debug(f"safe_reply called with update type: {type(update)}, has message: {hasattr(update, 'message') if update else False}")
+    
+    if not update:
+        logger.error("safe_reply called with None update object")
+        return
+        
+    if not hasattr(update, 'message') or not update.message:
+        logger.error(f"Update object has no message attribute or message is None. Update: {update}")
+        return
+        
     for attempt in range(max_retries):
         try:
+            logger.debug(f"safe_reply attempt {attempt + 1}: sending message to chat {update.message.chat_id if update.message else 'unknown'}")
             await update.message.reply_text(text)
+            logger.debug(f"safe_reply successful on attempt {attempt + 1}")
             return
         except Exception as e:
             if attempt == max_retries - 1:
                 logger.error(f"Failed to send message after {max_retries} attempts: {e}")
+                logger.exception("Full safe_reply error traceback:")
             else:
                 logger.warning(f"Attempt {attempt + 1} failed, retrying: {e}")
                 await asyncio.sleep(1)

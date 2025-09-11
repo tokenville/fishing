@@ -8,14 +8,28 @@ primary_region = "arn"
 [env]
   PYTHONUNBUFFERED = "1"
   PYTHONDONTWRITEBYTECODE = "1"
+  LOG_LEVEL = "DEBUG"
   WEBAPP_URL = "https://fsh-tac.fly.dev/webapp"
   BUNNYCDN_STORAGE_ZONE = "miniapps"
   BUNNYCDN_HOSTNAME = "se.storage.bunnycdn.com"
   BUNNYCDN_PUBLIC_URL = "https://miniapps.b-cdn.net"
 
-# No public networking; this is a background worker (Telegram bot)
-# Dockerfile CMD runs the bot, but we also specify a process for clarity
-[processes]
-  worker = "python main.py"
+# HTTP service configuration for Mini App
+[http_service]
+  internal_port = 8080
+  force_https = true
+  min_machines_running = 1
+  auto_stop_machines = false
+  auto_start_machines = false
+  
+[http_service.concurrency]
+  type = "connections"
+  hard_limit = 25
+  soft_limit = 20
+
+# Machine configuration
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
 
 

@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from src.database.db_manager import (
     get_user, create_user, get_active_position, close_position, use_bait, create_position_with_gear,
-    ensure_user_has_level, give_starter_rod, get_available_ponds, get_user_rods, get_pond_by_id,
+    ensure_user_has_level, give_starter_rod, get_user_rods, get_pond_by_id,
     get_rod_by_id, get_suitable_fish, get_fish_by_id, check_rate_limit,
     get_user_virtual_balance, get_flexible_leaderboard,
     get_group_pond_by_chat_id, get_user_group_ponds, add_user_to_group
@@ -36,6 +36,8 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     chat = update.effective_chat
+    
+    logger.debug(f"CAST command called by user {user_id} ({username}) in chat {chat.id if chat else 'unknown'}")
     
     try:
         # Check rate limit
@@ -163,13 +165,16 @@ You have access to {len(user_group_ponds)} pond(s) from your group memberships.
         )
         
     except Exception as e:
-        logger.error(f"Error in cast command: {e}")
+        logger.error(f"Error in cast command for user {user_id}: {e}")
+        logger.exception("Full cast command error traceback:")
         await safe_reply(update, "🎣 Something went wrong! Try again.")
 
 async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /hook command - pull out fish with animated sequence and rate limiting"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    
+    logger.debug(f"HOOK command called by user {user_id} ({username})")
     
     try:
         # Check rate limit
@@ -346,6 +351,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     
+    logger.debug(f"START command called by user {user_id} ({username})")
+    
     try:
         # Get or create user
         user = await get_user(user_id)
@@ -370,54 +377,82 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         # Get user's available equipment count
         user_rods = await get_user_rods(user_id)
-        available_ponds = await get_available_ponds(user_level)
+        user_group_ponds = await get_user_group_ponds(user_id)
         rods_count = len(user_rods) if user_rods else 0
-        ponds_count = len(available_ponds) if available_ponds else 0
+        ponds_count = len(user_group_ponds) if user_group_ponds else 0
         
         # Create personalized start message
         status_emoji = "🎣" if active_position else "🌊"
         fishing_status = "Currently fishing!" if active_position else "Ready to fish"
         
-        start_message = f"""<b>🎣 Welcome, {username}!</b>
+        start_message = f"""<b>🎣 Welcome to Big Catchy, {username}!</b>
 
-{status_emoji} <b>Your Stats:</b>
+<b>Dex trading x Fishing!</b>
+Make leveraged trades and catch fish based on your performance - from trash catches to legendary sea monsters!
 
+<b>🎮 How it works:</b>
+- Add bot to any group to create fishing pond
+- Cast line = open real trading position  
+- Watch prices like waiting for fish bite
+- Close trade = discover your catch!
+
+<b>Your Stats:</b>
 🎯 <b>Level:</b> {user_level}
-⚡ <b>Experience:</b> {experience} XP
 🪱 <b>$BAIT Tokens:</b> {bait_tokens}
 🎣 <b>Fishing Rods:</b> {rods_count}
 🌊 <b>Available Ponds:</b> {ponds_count}
 📊 <b>Status:</b> {fishing_status}
 
-<b>🎮 Quick Start:</b>
-• /cast - Cast your rod
-• /hook - Hook the fish
-• /status - Check progress
-• /leaderboard - Best anglers
-• /help - Full guide
+<b>🎣 Quick Commands:</b>
+- /cast - Start fishing (make trade)
+- /hook - Close position & see catch
+- /aquarium - View your fish collection
+- /leaderboard - Top fishermen
+- /help - Full guide
+
+<b>🐟 Your catches depend on trading results:</b>
+🗑️ Losses = Trash (soggy pizza, broken dreams)
+🐟 Small profit = Tiny fish (anxiety anchovy)
+🦈 Big gains = Epic fish (millionaire marlin)
+🐋 Massive wins = Legends (cosmic whale)
 
 <i>Each cast costs 1 $BAIT token!</i>"""
 
         # Create web app button
-        webapp_url = os.environ.get('WEBAPP_URL', 'http://localhost:8000/webapp')
-        keyboard = [[
-            InlineKeyboardButton(
-                "🎮 Open Game", 
-                web_app=WebAppInfo(url=webapp_url)
-            )
-        ]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        webapp_url = os.environ.get('WEBAPP_URL')
+        logger.debug(f"WEBAPP_URL: {webapp_url}")
         
+        if not webapp_url:
+            logger.error("WEBAPP_URL environment variable not set!")
+            await update.message.reply_text(start_message, parse_mode='HTML')
+            return
+            
+        try:
+            keyboard = [[
+                InlineKeyboardButton(
+                    "🎮 Открыть игру", 
+                    web_app=WebAppInfo(url=webapp_url)
+                )
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.debug(f"Created keyboard with webapp URL: {webapp_url}")
+        except Exception as e:
+            logger.error(f"Error creating WebApp button: {e}")
+            await update.message.reply_text(start_message, parse_mode='HTML')
+            return
+        
+        logger.debug(f"Sending start message with webapp button to user {user_id}")
         await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
+        logger.debug(f"Successfully sent start message to user {user_id}")
         
     except Exception as e:
-        logger.error(f"Error in start command: {e}")
+        logger.error(f"Error in start command for user {user_id}: {e}")
+        logger.exception("Full start command error traceback:")
         await safe_reply(update, "🎣 Welcome! Use /help for guide.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command - show dynamic help from database"""
-    help_text = await get_help_text()
-    await safe_reply(update, help_text)
+    """Handle /help command - show same content as /start"""
+    await start_command(update, context)
 
 async def test_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /test_card command - for development only"""

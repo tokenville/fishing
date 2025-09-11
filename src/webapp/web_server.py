@@ -61,9 +61,13 @@ class WebAppServer:
     
     async def serve_main_page(self, request):
         """Serve the main webapp HTML page"""
+        logger.debug(f"Serving main webapp page, request from: {request.remote}")
         try:
             webapp_path = Path('webapp/templates/index.html')
+            logger.debug(f"Trying to serve file: {webapp_path.absolute()}")
+            
             if not webapp_path.exists():
+                logger.error(f"Main page file not found: {webapp_path.absolute()}")
                 return web.Response(
                     text="<h1>WebApp not found</h1><p>webapp/templates/index.html does not exist</p>",
                     content_type='text/html',
@@ -73,9 +77,11 @@ class WebAppServer:
             async with aiofiles.open(webapp_path, mode='r', encoding='utf-8') as f:
                 content = await f.read()
             
+            logger.debug(f"Successfully served main page, content length: {len(content)}")
             return web.Response(text=content, content_type='text/html')
         except Exception as e:
             logger.error(f"Error serving webapp: {e}")
+            logger.exception("Full serve_main_page error traceback:")
             return web.Response(
                 text=f"<h1>Error</h1><p>Failed to load webapp: {str(e)}</p>",
                 content_type='text/html',
@@ -501,15 +507,19 @@ def create_webapp():
 async def start_web_server(port: int = 8080):
     """Start the web server"""
     try:
+        logger.debug(f"Initializing web server on port {port}")
         runner = web.AppRunner(web_server.app)
         await runner.setup()
+        logger.debug("AppRunner setup completed")
         
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
+        logger.debug(f"TCPSite started on 0.0.0.0:{port}")
         
-        logger.info(f"Web server started on port {port}")
+        logger.info(f"Web server successfully started on port {port}")
         return runner
         
     except Exception as e:
-        logger.error(f"Failed to start web server: {e}")
+        logger.error(f"Failed to start web server on port {port}: {e}")
+        logger.exception("Full start_web_server error traceback:")
         raise
