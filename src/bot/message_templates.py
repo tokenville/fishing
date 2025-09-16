@@ -15,7 +15,7 @@ def get_cast_header(username, rod_name, pond_name, pond_pair, entry_price, lever
     return (
         f"🎣 <b>{safe_username}</b> is casting:\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
-        f"Pond: {pond_name} ({pond_pair})\n"
+        f"Fishery: {pond_name} ({pond_pair})\n"
         f"📈 Entry position: <b>${entry_price:.2f}</b>"
     )
 
@@ -43,7 +43,7 @@ def get_hook_header(username, rod_name, pond_name, pond_pair, time_fishing, entr
     return (
         f"🎣 <b>{safe_username} IS HOOKING!</b>\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
-        f"Pond: {pond_name} ({pond_pair})\n"
+        f"Fishery: {pond_name} ({pond_pair})\n"
         f"Fishing time: <b>{time_fishing}</b>\n"
         f"Position: ${entry_price:.2f} → <b>${current_price:.2f}</b>"
     )
@@ -292,7 +292,7 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
         f"This is {catch_story}\n\n"
         f"💰 <b>PnL: {dollar_str} ({pnl_str})</b>\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
-        f"Pond: {pond_name} ({pond_pair})\n"
+        f"Fishery: {pond_name} ({pond_pair})\n"
         f"Fishing time: <b>{time_fishing}</b>\n"
         f"Position: ${entry_price:.2f} → ${current_price:.2f}\n\n"
         f"🚀 Use /cast to start fishing!"
@@ -333,7 +333,7 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
     return (
         f"🎣 <b>Fishing status {safe_username}:</b>\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
-        f"Pond: {pond_name} ({pond_pair})\n"
+        f"Fishery: {pond_name} ({pond_pair})\n"
         f"⏱ Fishing time: <b>{time_fishing}</b>\n"
         f"📈 Position: ${entry_price:.2f} → <b>${current_price:.2f}</b>\n"
         f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})</b>\n\n"

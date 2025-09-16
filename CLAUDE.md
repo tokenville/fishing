@@ -167,7 +167,9 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 - `/status` - Check active position with multi-currency P&L updates
 - `/pnl` - Show virtual balance, P&L statistics, and leaderboard position
 - `/leaderboard` - Display top 10 players by virtual balance with trading stats
-- `/leaderboard week` - Weekly leaderboard rankings
+  - **In group chats**: Shows only trades from that specific group's pond (public data)
+  - **In private chats**: Shows global leaderboard with personal user stats and ranking
+- `/leaderboard week` - Weekly leaderboard rankings (group-specific in groups, global in private)
 - `/help` - Show dynamic game rules generated from database (always up-to-date)
 - `/test_card` - Generate test fish cards (development only)
 
@@ -216,6 +218,7 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 ### Social Features:
 - Group chat friendly with visible casting announcements
 - **Active Rod System**: Players select preferred rod for consistent trading strategy
+- **Privacy-Aware Leaderboards**: Group-specific leaderboards in groups (public data only), global leaderboards with personal stats in private chats
 - Dynamic fish card generation with database-driven stories
 - Progressive difficulty through level-locked content
 - **HTML Formatting**: Rich text with bold headers, colored indicators, and structured display
@@ -419,6 +422,17 @@ prompt_manager.clear_image_cache("Fish Name")  # Clear specific fish
 **Important:** When updating AI prompts in the database, only include the fish-specific description. The static style context is automatically appended during image generation.
 
 ## 🚀 Recent Enhancements (Absurd Fish Update)
+
+### Privacy-Aware Leaderboard System
+- **Context-Aware Behavior**: `/leaderboard` command now works differently in groups vs private chats
+- **Group Chat Leaderboards**: Shows only trades from that specific group's pond (public data)
+  - Displays pond name and group-specific rankings
+  - Removes personal user stats to protect privacy
+  - Helps text: "This leaderboard shows only trades made in this group"
+- **Private Chat Leaderboards**: Maintains global leaderboard with full personal stats
+  - Shows user's rank, balance, and percentile position
+  - Includes personal P&L statistics and trading history
+- **Time Period Support**: Both group and private leaderboards support weekly/daily/monthly filters
 
 ### Quick Fishing Prevention System
 - **Anti-Spam Protection**: Prevents fishing completion in under 60 seconds with minimal P&L (<0.1%)
