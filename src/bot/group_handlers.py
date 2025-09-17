@@ -120,20 +120,3 @@ async def chat_member_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             
     except Exception as e:
         logger.error(f"Error in chat_member_handler: {e}")
-
-async def group_cast_message(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, pond_name: str):
-    """Send cast announcement message to the group"""
-    try:
-        cast_msg = f"🎣 <b>{username}</b> cast their rod into <b>{pond_name}</b>!"
-        await safe_reply(update, cast_msg)
-    except Exception as e:
-        logger.error(f"Error sending group cast message: {e}")
-
-async def group_hook_message(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, fish_name: str, pnl_percent: float):
-    """Send hook result announcement to the group"""
-    try:
-        pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
-        hook_msg = f"🎣 <b>{username}</b> caught {fish_name}! {pnl_color} P&L: {pnl_percent:+.1f}%"
-        await safe_reply(update, hook_msg)
-    except Exception as e:
-        logger.error(f"Error sending group hook message: {e}")

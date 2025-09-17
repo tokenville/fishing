@@ -1,0 +1,319 @@
+"""
+Private fishing helper functions for the fishing bot.
+Contains helper functions for handling private fishing operations from groups.
+"""
+
+import asyncio
+import logging
+from telegram.ext import ContextTypes
+
+from src.database.db_manager import (
+    get_user, get_active_position, use_bait, create_position_with_gear, close_position,
+    ensure_user_has_level, give_starter_rod, get_pond_by_id, get_rod_by_id,
+    get_suitable_fish, check_hook_rate_limit, ensure_user_has_active_rod
+)
+from src.utils.crypto_price import get_crypto_price, calculate_pnl, format_time_fishing, get_fishing_time_seconds, get_price_error_message
+from src.bot.message_templates import get_catch_story_from_db, get_quick_fishing_message, format_fishing_complete_caption
+from src.generators.fish_card_generator import generate_fish_card_from_db
+
+logger = logging.getLogger(__name__)
+
+async def start_private_fishing_from_group(user_id: int, username: str, pond_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start fishing process in private chat from group command"""
+    try:
+        # Ensure user has level and starter rod
+        await ensure_user_has_level(user_id)
+        await give_starter_rod(user_id)
+        user = await get_user(user_id)
+        
+        # Check if user has enough BAIT
+        if user['bait_tokens'] <= 0:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 No $BAIT tokens! Need more worms for fishing 🪱"
+            )
+            return
+        
+        # Check if user is already fishing
+        active_position = await get_active_position(user_id)
+        if active_position:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress."
+            )
+            return
+        
+        # Use bait
+        if not await use_bait(user_id):
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Failed to use bait. Try again!"
+            )
+            return
+        
+        # Get user's active rod
+        active_rod = await ensure_user_has_active_rod(user_id)
+        
+        if not active_rod:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Failed to find active fishing rod! Try again."
+            )
+            return
+        
+        # Get pond info
+        pond = await get_pond_by_id(pond_id)
+        if not pond:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Pond not found! Try again."
+            )
+            return
+        
+        # Get current price and create position
+        base_currency = pond['base_currency']
+        current_price = await get_crypto_price(base_currency)
+        
+        # Create position
+        await create_position_with_gear(user_id, pond_id, active_rod['id'], current_price)
+        
+        # Send success message to private chat
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"🎣 <b>Cast successful!</b>\n\n"
+                 f"🌊 <b>Pond:</b> {pond['name']}\n"
+                 f"🎣 <b>Rod:</b> {active_rod['name']}\n"
+                 f"💰 <b>Entry Price:</b> ${current_price:,.4f}\n\n"
+                 f"<i>Use /hook when you're ready to catch the fish!</i>",
+            parse_mode='HTML'
+        )
+        
+        # Send group notification if pond is a group pond
+        if pond.get('pond_type') == 'group' and pond.get('chat_id'):
+            try:
+                group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>"
+                await context.bot.send_message(
+                    chat_id=pond['chat_id'],
+                    text=group_message,
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.warning(f"Could not send group cast notification: {e}")
+        
+        logger.info(f"User {username} started fishing from group in private chat, pond {pond_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in start_private_fishing_from_group for user {user_id}: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎣 Something went wrong! Try /cast again."
+        )
+
+async def complete_private_hook_from_group(user_id: int, username: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Complete hook process in private chat from group command"""
+    try:
+        # Get active position
+        position = await get_active_position(user_id)
+        if not position:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎣 {username} is not fishing! Use /cast to throw the fishing rod."
+            )
+            return
+        
+        # Check hook rate limit
+        if not await check_hook_rate_limit(user_id):
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Easy there, fisherman! Hook attempts are limited to prevent spam.\n\n<i>Max 3 hook attempts per minute. Give the fish a chance to bite! 🐟</i>",
+                parse_mode='HTML'
+            )
+            return
+        
+        # Get pond and rod data for the position
+        pond = await get_pond_by_id(position['pond_id']) if position['pond_id'] else None
+        rod = await get_rod_by_id(position['rod_id']) if position['rod_id'] else None
+        
+        # Get base currency for price fetching
+        base_currency = pond['base_currency'] if pond else 'ETH'
+        leverage = rod['leverage'] if rod else 1.5
+        entry_price = position['entry_price']
+        
+        # Pre-calculate time for quick fishing check
+        time_fishing = format_time_fishing(position['entry_time'])
+        fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
+        
+        # QUICK FISHING CHECK - must be done BEFORE animation starts!
+        if fishing_time_seconds < 60:
+            try:
+                quick_price = await get_crypto_price(base_currency)
+                quick_pnl = calculate_pnl(entry_price, quick_price, leverage)
+                
+                if abs(quick_pnl) < 0.1:
+                    quick_message = get_quick_fishing_message(fishing_time_seconds)
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"{quick_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n📈 <b>P&L:</b> {quick_pnl:+.4f}%\n\n<i>Wait at least 1 minute for the market to move!</i>",
+                        parse_mode='HTML'
+                    )
+                    return
+            except Exception as e:
+                logger.warning(f"Quick fishing check failed, allowing hook anyway: {e}")
+        
+        # Get user level
+        user = await get_user(user_id)
+        user_level = user['level'] if user else 1
+        
+        # Start PARALLEL tasks immediately - no blocking!
+        # 1. Hook animation (simplified for private chat)
+        hook_task = asyncio.create_task(
+            private_hook_animation(context, user_id, username)
+        )
+        
+        # 2. Price fetching with retry
+        async def fetch_price_and_calculate():
+            try:
+                current_price = await get_crypto_price(base_currency)
+                pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+                return current_price, pnl_percent
+            except Exception as e:
+                logger.error(f"Price fetch failed in private hook: {e}")
+                return "ERROR", None
+                
+        price_task = asyncio.create_task(fetch_price_and_calculate())
+        
+        # Wait for price calculation to complete (runs in parallel with animation)
+        current_price, pnl_percent = await price_task
+        
+        # Handle price fetch failure
+        if current_price == "ERROR":
+            await hook_task  # Wait for animation to complete
+            error_message = get_price_error_message()
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"{error_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n\n<i>Try pulling the hook again!</i>",
+                parse_mode='HTML'
+            )
+            return
+        
+        # Normal fishing - proceed with fish selection and generation
+        fish_data = await get_suitable_fish(
+            pnl_percent, 
+            user_level,
+            position['pond_id'] if position['pond_id'] else 1,
+            position['rod_id'] if position['rod_id'] else 1
+        )
+        
+        if not fish_data:
+            logger.warning(f"No suitable fish found for PnL {pnl_percent}%, using fallback")
+            fish_data = await get_suitable_fish(pnl_percent, 1, 1, 1)
+        
+        if fish_data:
+            # Generate the catch story from database 
+            catch_story = get_catch_story_from_db(fish_data)
+            
+            # Create complete caption using structured format
+            complete_story = format_fishing_complete_caption(
+                username=username,
+                catch_story=catch_story,
+                rod_name=rod['name'] if rod else 'Starter rod',
+                leverage=leverage,
+                pond_name=pond['name'] if pond else '🌊 Crypto Waters',
+                pond_pair=pond['trading_pair'] if pond else 'ETH/USDT',
+                time_fishing=time_fishing,
+                entry_price=entry_price,
+                current_price=current_price,
+                pnl_percent=pnl_percent,
+                user_level=user_level
+            )
+            
+            # Start generating the image while animation continues
+            card_task = asyncio.create_task(
+                generate_fish_card_from_db(fish_data)
+            )
+            
+            # Close position with fish ID
+            await close_position(position['id'], current_price, pnl_percent, fish_data['id'])
+            
+            # Wait for both animation and card generation to complete
+            await hook_task
+            card_image = await card_task
+            
+            # Send the fish card to private chat
+            if card_image:
+                try:
+                    from io import BytesIO
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=BytesIO(card_image),
+                        caption=complete_story,
+                        parse_mode='HTML'
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send fish card to private chat: {e}")
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=complete_story,
+                        parse_mode='HTML'
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=complete_story,
+                    parse_mode='HTML'
+                )
+            
+            # Send group notification if this was a group pond
+            if pond and pond.get('pond_type') == 'group' and pond.get('chat_id'):
+                try:
+                    pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
+                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%"
+                    
+                    await context.bot.send_message(
+                        chat_id=pond['chat_id'],
+                        text=group_notification,
+                        parse_mode='HTML'
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not send group hook notification: {e}")
+        else:
+            # Emergency fallback
+            await hook_task
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎣 {username} caught something strange! P&L: {pnl_percent:+.1f}%"
+            )
+            await close_position(position['id'], current_price, pnl_percent, None)
+        
+        logger.info(f"User {username} completed hook from group in private chat")
+        
+    except Exception as e:
+        logger.error(f"Error in complete_private_hook_from_group for user {user_id}: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎣 Error pulling out fish! Try /hook again."
+        )
+
+async def private_hook_animation(context: ContextTypes.DEFAULT_TYPE, user_id: int, username: str):
+    """Simplified hook animation for private chat"""
+    try:
+        # Simple text-based animation for private chat
+        animation_steps = [
+            f"🎣 <b>{username}</b> is pulling the line...",
+            f"🌊 Something's biting! <b>{username}</b> fights the catch...",
+            f"⚡ The line is tense! <b>{username}</b> reels it in...",
+            f"🐟 Almost got it! <b>{username}</b> pulls harder...",
+            f"🎯 <b>Success!</b> <b>{username}</b> caught something!"
+        ]
+        
+        for i, step in enumerate(animation_steps):
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=step,
+                parse_mode='HTML'
+            )
+            if i < len(animation_steps) - 1:  # Don't sleep after the last step
+                await asyncio.sleep(2.5)  # Match original animation timing
+                
+    except Exception as e:
+        logger.warning(f"Error in private hook animation: {e}")

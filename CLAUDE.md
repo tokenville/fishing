@@ -40,37 +40,55 @@ The bot uses:
 ### Project Structure:
 ```
 src/
-├── bot/                        # Telegram bot components
-│   ├── telegram_bot.py         # Main bot module
-│   ├── command_handlers.py     # Command handlers (/cast, /hook, etc.)
-│   ├── animations.py           # Fishing animations and status updates
-│   └── message_templates.py    # Dynamic message templates from database
+├── bot/                          # Telegram bot components (refactored into smaller modules)
+│   ├── telegram_bot.py           # Main bot module (13 lines)
+│   ├── command_handlers.py       # Command handler imports and registration (17 lines)
+│   ├── fishing_commands.py       # Core fishing commands: cast, hook, status (404 lines)
+│   ├── user_commands.py          # User commands: start, help, pnl (173 lines)
+│   ├── leaderboard_commands.py   # Leaderboard and test commands (163 lines)
+│   ├── group_commands.py         # Group commands and callbacks (280 lines)
+│   ├── private_fishing_helpers.py # Helper functions for private fishing (318 lines)
+│   ├── group_handlers.py         # Group management handlers (121 lines)
+│   ├── animations.py             # Fishing animations and status updates (220 lines)
+│   └── message_templates.py      # Dynamic message templates from database (440 lines)
 ├── database/
-│   └── db_manager.py           # PostgreSQL database operations with fish system
+│   └── db_manager.py             # PostgreSQL database operations with fish system
 ├── utils/
-│   ├── crypto_price.py         # Multi-currency price fetching and P&L calculations
-│   └── bunny_cdn.py           # Bunny CDN integration for image delivery
+│   ├── crypto_price.py           # Multi-currency price fetching and P&L calculations
+│   └── bunny_cdn.py             # Bunny CDN integration for image delivery
 ├── generators/
-│   └── fish_card_generator.py  # AI-powered fish card generation with CDN upload
-└── webapp/                     # Telegram Mini App components
-    └── web_server.py           # aiohttp web server with API endpoints and CDN fallback
+│   └── fish_card_generator.py    # AI-powered fish card generation with CDN upload
+└── webapp/                       # Telegram Mini App components
+    └── web_server.py             # aiohttp web server with API endpoints and CDN fallback
 webapp/
 ├── templates/
-│   └── index.html              # Main Mini App interface
+│   └── index.html                # Main Mini App interface
 └── static/
     ├── css/
-    │   ├── game.css           # Gaming-style CSS with RPG aesthetics
-    │   └── skeleton.css       # Skeleton loading animations and states
-    ├── js/app.js              # Mini App JavaScript with CDN integration and lazy loading
+    │   ├── game.css             # Gaming-style CSS with RPG aesthetics
+    │   └── skeleton.css         # Skeleton loading animations and states
+    ├── js/app.js                # Mini App JavaScript with CDN integration and lazy loading
     └── images/
-        ├── fisherman.svg      # Player avatar image
-        ├── long-rod.svg       # Long trading rod asset
-        └── short-rod.svg      # Short trading rod asset
+        ├── fisherman.svg        # Player avatar image
+        ├── long-rod.svg         # Long trading rod asset
+        └── short-rod.svg        # Short trading rod asset
 ```
 
-Key files:
+### 🏗️ Bot Command Architecture (Refactored)
+
+**Key files:**
 - `main.py` - Entry point with bot initialization, conflict handling, HTML parse mode, and web server
-- `src/bot/command_handlers.py` - All Telegram command implementations with Mini App integration
+- `src/bot/command_handlers.py` - **NEW**: Centralized imports and command registration (17 lines)
+- `src/bot/fishing_commands.py` - **NEW**: Core fishing functionality (cast, hook, status) (404 lines)
+- `src/bot/user_commands.py` - **NEW**: User-oriented commands (start, help, pnl) (173 lines)  
+- `src/bot/leaderboard_commands.py` - **NEW**: Rankings and test commands (163 lines)
+- `src/bot/group_commands.py` - **NEW**: Group commands and callbacks (gofishing, pond selection) (280 lines)
+- `src/bot/private_fishing_helpers.py` - **NEW**: Helper functions for private fishing operations (318 lines)
+- `src/bot/group_handlers.py` - Group event handlers (bot addition, member changes) (121 lines)
+- `src/bot/animations.py` - Fishing animations and status updates (220 lines)
+- `src/bot/message_templates.py` - Dynamic message templates from database (440 lines)
+
+**Other key files:**
 - `src/database/db_manager.py` - Extended PostgreSQL database operations (users, positions, fish, AI prompts, CDN URLs)
 - `src/webapp/web_server.py` - aiohttp server with REST API endpoints and smart CDN fallback system
 - `src/utils/bunny_cdn.py` - Bunny CDN integration with image optimization and upload capabilities
@@ -79,6 +97,18 @@ Key files:
 - `webapp/static/css/game.css` - RPG-style CSS with gaming aesthetics and proper aspect ratios
 - `webapp/static/css/skeleton.css` - Animated skeleton loaders with shimmer effects
 - `migrate_images_to_cdn.py` - Background script for migrating existing images to CDN
+
+### 📦 Refactoring Benefits
+
+**Before:** Single `command_handlers.py` file with 1,298 lines
+**After:** Modular structure with 6 focused files, each under 404 lines
+
+- **🎯 Clear separation of concerns** - Each module has a specific responsibility
+- **📖 Better readability** - Smaller files are easier to understand and navigate
+- **🔧 Easier maintenance** - Changes are localized to relevant modules
+- **🧪 Better testability** - Individual modules can be tested independently
+- **👥 Parallel development** - Multiple developers can work on different command types simultaneously
+- **📈 Backward compatibility** - All existing imports continue to work unchanged
 
 ## Development Commands
 
@@ -546,3 +576,86 @@ See `example_prompt_management.py` for a comprehensive example of:
 - Viewing and updating AI prompts
 - Testing image generation
 - Best practices for prompt creation
+
+## 🔄 Recent Refactoring (2024)
+
+### Command Handlers Modularization
+The bot's command handling system has been refactored from a single large file into smaller, focused modules:
+
+#### ✅ **Completed Refactoring:**
+- **Original**: `src/bot/command_handlers.py` (1,298 lines) - too large and difficult to maintain
+- **Refactored**: Split into 6 focused modules with clear separation of concerns
+
+#### 📁 **New Module Structure:**
+1. **`fishing_commands.py`** (404 lines) - Core fishing functionality
+   - `cast()` - Start fishing with pond selection
+   - `hook()` - Complete fishing with parallel processing  
+   - `status()` - Check current fishing position
+
+2. **`user_commands.py`** (173 lines) - User-oriented commands
+   - `start_command()` - Welcome and Mini App integration
+   - `help_command()` - Alias to start command
+   - `pnl()` - Personal P&L statistics
+
+3. **`leaderboard_commands.py`** (163 lines) - Rankings and testing
+   - `leaderboard()` - Group/global leaderboards with privacy awareness
+   - `test_card()` - Development testing command
+
+4. **`group_commands.py`** (280 lines) - Group functionality
+   - `gofishing()` - Connect group pond to user account
+   - `pond_selection_callback()` - Pond selection interface
+   - `join_fishing_callback()` - Join fishing via inline buttons
+
+5. **`private_fishing_helpers.py`** (318 lines) - Helper functions
+   - `start_private_fishing_from_group()` - Private fishing initiation
+   - `complete_private_hook_from_group()` - Private hook completion
+   - `private_hook_animation()` - Simplified animation for private chat
+
+6. **`command_handlers.py`** (17 lines) - Import aggregation
+   - Imports all commands from specialized modules
+   - Maintains backward compatibility
+   - Single point for command registration
+
+#### 🎯 **Benefits Achieved:**
+- **Maintainability**: Each file has a single, clear responsibility
+- **Readability**: All files are under 404 lines (target was 300 lines max)
+- **Testability**: Modules can be tested independently
+- **Development**: Multiple developers can work on different command types
+- **Navigation**: Easier to find and modify specific functionality
+- **Backwards Compatibility**: All existing imports continue to work
+
+#### 📊 **File Size Comparison:**
+```
+BEFORE:  command_handlers.py     1,298 lines
+AFTER:   fishing_commands.py       404 lines
+         user_commands.py           173 lines  
+         leaderboard_commands.py    163 lines
+         group_commands.py          280 lines
+         private_fishing_helpers.py 318 lines
+         command_handlers.py         17 lines
+         ─────────────────────────────────────
+         TOTAL:                   1,355 lines
+```
+
+The slight increase in total lines (57 lines) comes from:
+- Module docstrings and imports (necessary for proper separation)
+- Better code organization and documentation
+- Enhanced maintainability worth the minimal overhead
+
+#### 🔧 **Implementation Notes:**
+- All imports updated in dependent files (`main.py`)
+- Command registration remains centralized in `main.py`
+- No breaking changes to existing functionality
+- Code compiles without syntax errors
+- Modular imports allow for lazy loading if needed in the future
+
+#### 🧑‍💻 **Working with Refactored Code:**
+When modifying bot commands, work with the appropriate specialized module:
+- **Fishing logic** → `src/bot/fishing_commands.py`
+- **User features** → `src/bot/user_commands.py`
+- **Rankings/stats** → `src/bot/leaderboard_commands.py`
+- **Group features** → `src/bot/group_commands.py`
+- **Helper functions** → `src/bot/private_fishing_helpers.py`
+- **Registration only** → `src/bot/command_handlers.py`
+
+All modules follow the same import patterns and maintain the existing code style and conventions.

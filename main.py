@@ -9,7 +9,7 @@ import logging
 from telegram.ext import Application, CommandHandler, ChatMemberHandler, CallbackQueryHandler, Defaults
 
 from src.database.db_manager import init_database, close_pool, reset_database
-from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, pond_selection_callback
+from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, pond_selection_callback, gofishing, join_fishing_callback
 from src.bot.group_handlers import my_chat_member_handler, chat_member_handler
 from src.webapp.web_server import start_web_server
 
@@ -59,6 +59,7 @@ def create_application():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("leaderboard", leaderboard))
     application.add_handler(CommandHandler("pnl", pnl))
+    application.add_handler(CommandHandler("gofishing", gofishing))
     
     # Add group management handlers
     application.add_handler(ChatMemberHandler(my_chat_member_handler, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -66,6 +67,7 @@ def create_application():
     
     # Add callback handlers
     application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
+    application.add_handler(CallbackQueryHandler(join_fishing_callback, pattern=r"^join_fishing_"))
     
     return application
 
