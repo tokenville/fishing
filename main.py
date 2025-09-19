@@ -6,10 +6,17 @@ Handles bot startup, configuration, and graceful shutdown.
 import os
 import asyncio
 import logging
-from telegram.ext import Application, CommandHandler, ChatMemberHandler, CallbackQueryHandler, Defaults
+from telegram.ext import Application, CommandHandler, ChatMemberHandler, CallbackQueryHandler, PreCheckoutQueryHandler, MessageHandler, filters, Defaults
+from telegram import Update
+from telegram.ext import ContextTypes
 
 from src.database.db_manager import init_database, close_pool, reset_database
-from src.bot.command_handlers import cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, pond_selection_callback, gofishing, join_fishing_callback
+from src.bot.command_handlers import (
+    cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, 
+    pond_selection_callback, gofishing, join_fishing_callback,
+    handle_pre_checkout_query, handle_successful_payment, buy_bait_command, 
+    buy_bait_callback, transactions_command
+)
 from src.bot.group_handlers import my_chat_member_handler, chat_member_handler
 from src.webapp.web_server import start_web_server
 
@@ -23,19 +30,54 @@ logging.basicConfig(
     level=log_level_value
 )
 
-# Suppress some verbose logs (only if not in DEBUG mode)
+# Suppress verbose logs from external libraries
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+
+# In DEBUG mode, still suppress the most verbose logs but allow some telegram logs
 if log_level_value > logging.DEBUG:
-    logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('telegram').setLevel(logging.WARNING)
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
 else:
-    # In DEBUG mode, show more detailed logs
-    logging.getLogger('httpx').setLevel(logging.INFO)
+    # In DEBUG mode, show telegram logs but still suppress HTTP polling
     logging.getLogger('telegram').setLevel(logging.INFO)
     logging.getLogger('aiohttp').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
 logger.info(f"Logging configured with level: {log_level} ({log_level_value})")
+
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle data from WebApp"""
+    try:
+        if update.message and update.message.web_app_data:
+            data = update.message.web_app_data.data
+            user = update.effective_user
+            chat = update.effective_chat
+            
+            logger.info(f"WebApp data received from user {user.id}: {data}")
+            
+            # Если данные - это команда, выполняем её
+            if data.startswith('/'):
+                command = data.strip()
+                logger.info(f"Executing command from WebApp: {command}")
+                
+                # Создаем фейковое сообщение с командой
+                if command == '/cast':
+                    await cast(update, context)
+                elif command == '/hook':
+                    await hook(update, context)
+                elif command == '/status':
+                    await status(update, context)
+                else:
+                    await update.message.reply_text(f"Unknown command: {command}")
+            else:
+                await update.message.reply_text("Data received from WebApp!")
+                
+    except Exception as e:
+        logger.error(f"Error handling WebApp data: {e}")
+        if update.message:
+            await update.message.reply_text("Error processing WebApp data")
 
 # Bot token from environment
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -60,6 +102,15 @@ def create_application():
     application.add_handler(CommandHandler("leaderboard", leaderboard))
     application.add_handler(CommandHandler("pnl", pnl))
     application.add_handler(CommandHandler("gofishing", gofishing))
+    application.add_handler(CommandHandler("buy", buy_bait_command))
+    application.add_handler(CommandHandler("transactions", transactions_command))
+    
+    # Add payment handlers
+    application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
+    
+    # Add WebApp data handler
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     
     # Add group management handlers
     application.add_handler(ChatMemberHandler(my_chat_member_handler, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -68,6 +119,7 @@ def create_application():
     # Add callback handlers
     application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
     application.add_handler(CallbackQueryHandler(join_fishing_callback, pattern=r"^join_fishing_"))
+    application.add_handler(CallbackQueryHandler(buy_bait_callback, pattern=r"^buy_bait_"))
     
     return application
 

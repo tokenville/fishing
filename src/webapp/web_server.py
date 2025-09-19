@@ -17,8 +17,12 @@ from src.database.db_manager import (
     get_user, get_user_rods, get_fish_by_id,
     get_user_fish_collection, get_user_fish_history,
     get_user_active_rod, set_user_active_rod,
-    get_user_virtual_balance, get_flexible_leaderboard
+    get_user_virtual_balance, get_flexible_leaderboard,
+    get_user_group_ponds, get_active_position, create_position_with_gear,
+    use_bait, ensure_user_has_active_rod, get_pond_by_id, get_rod_by_id,
+    get_suitable_fish, close_position
 )
+from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,21 @@ class WebAppServer:
         # Leaderboard and balance endpoints
         self.app.router.add_get('/api/user/{user_id}/balance', self.get_user_balance)
         self.app.router.add_get('/api/leaderboard', self.get_leaderboard)
+        
+        # Payment endpoints
+        self.app.router.add_get('/api/products', self.get_available_products)
+        self.app.router.add_get('/api/user/{user_id}/transactions', self.get_user_transactions)
+        self.app.router.add_post('/api/user/{user_id}/purchase', self.create_purchase_invoice)
+        
+        # Cast endpoints
+        self.app.router.add_get('/api/user/{user_id}/ponds', self.get_user_ponds)
+        self.app.router.add_get('/api/user/{user_id}/position', self.get_user_position)
+        self.app.router.add_post('/api/user/{user_id}/cast', self.create_position)
+        self.app.router.add_post('/api/user/{user_id}/hook', self.complete_position)
+        self.app.router.add_get('/api/crypto-price/{symbol}', self.get_crypto_price)
+        
+        # Bot info
+        self.app.router.add_get('/api/bot/info', self.get_bot_info)
         
         # Health check
         self.app.router.add_get('/health', self.health_check)
@@ -495,6 +514,411 @@ class WebAppServer:
             })
         except Exception as e:
             logger.error(f"Error getting leaderboard: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+
+    async def get_available_products(self, request):
+        """Get available BAIT products for purchase"""
+        try:
+            from src.database.db_manager import get_available_products
+            
+            products = await get_available_products()
+            
+            return web.json_response({
+                'products': [
+                    {
+                        'id': product['id'],
+                        'name': product['name'],
+                        'description': product['description'],
+                        'bait_amount': product['bait_amount'],
+                        'stars_price': product['stars_price'],
+                        'is_active': product['is_active']
+                    }
+                    for product in products
+                ]
+            })
+        except Exception as e:
+            logger.error(f"Error getting products: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+
+    async def get_user_transactions(self, request):
+        """Get user's transaction history"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            limit = int(request.query.get('limit', 10))
+            
+            from src.database.db_manager import get_user_transactions
+            
+            transactions = await get_user_transactions(user_id, limit)
+            
+            return web.json_response({
+                'transactions': [
+                    {
+                        'id': t['id'],
+                        'product_name': t['product_name'],
+                        'bait_amount': t['bait_amount'],
+                        'stars_amount': t['stars_amount'],
+                        'status': t['status'],
+                        'created_at': t['created_at'].isoformat() if t['created_at'] else None,
+                        'completed_at': t['completed_at'].isoformat() if t['completed_at'] else None
+                    }
+                    for t in transactions
+                ]
+            })
+        except Exception as e:
+            logger.error(f"Error getting user transactions: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+
+    async def create_purchase_invoice(self, request):
+        """Create purchase invoice for webapp"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            data = await request.json()
+            
+            product_id = data.get('product_id')
+            quantity = data.get('quantity', 1)
+            
+            if not product_id:
+                return web.json_response({'error': 'Product ID required'}, status=400)
+            
+            from src.database.db_manager import get_product_by_id, get_user
+            
+            # Validate product
+            product = await get_product_by_id(product_id)
+            if not product:
+                return web.json_response({'error': 'Product not found'}, status=404)
+            
+            # Validate user
+            user = await get_user(user_id)
+            if not user:
+                return web.json_response({'error': 'User not found'}, status=404)
+            
+            # Calculate totals
+            total_stars = product['stars_price'] * quantity
+            total_bait = product['bait_amount'] * quantity
+            
+            # Generate payload for Telegram invoice
+            payload = f"bait_{product_id}_{quantity}"
+            
+            return web.json_response({
+                'invoice_data': {
+                    'title': f"BAIT Tokens x{quantity}",
+                    'description': f"{total_bait} BAIT tokens for fishing",
+                    'payload': payload,
+                    'currency': 'XTR',
+                    'prices': [{'label': 'BAIT Tokens', 'amount': total_stars}],
+                    'provider_token': ''
+                },
+                'purchase_info': {
+                    'product_name': product['name'],
+                    'bait_amount': total_bait,
+                    'stars_amount': total_stars,
+                    'quantity': quantity
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error creating purchase invoice: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    # === CAST ENDPOINTS ===
+    
+    async def get_user_ponds(self, request):
+        """Get user's available ponds for fishing"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            ponds = await get_user_group_ponds(user_id)
+            
+            # Format response for frontend
+            formatted_ponds = []
+            for pond in ponds:
+                formatted_ponds.append({
+                    'id': pond['id'],
+                    'name': pond['name'],
+                    'trading_pair': pond['trading_pair'],
+                    'base_currency': pond['base_currency'],
+                    'quote_currency': pond['quote_currency'],
+                    'member_count': pond.get('member_count', 0),
+                    'required_level': pond.get('required_level', 1),
+                    'is_active': pond.get('is_active', True)
+                })
+            
+            return web.json_response(formatted_ponds)
+            
+        except ValueError:
+            return web.json_response({'error': 'Invalid user ID'}, status=400)
+        except Exception as e:
+            logger.error(f"Error getting user ponds: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def get_user_position(self, request):
+        """Get user's current active position"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            position = await get_active_position(user_id)
+            
+            if not position:
+                return web.json_response(None)
+            
+            # Format position for frontend
+            formatted_position = {
+                'id': position['id'],
+                'pond_id': position['pond_id'],
+                'rod_id': position['rod_id'],
+                'entry_price': float(position['entry_price']),
+                'entry_time': position['entry_time'].isoformat() if position['entry_time'] else None,
+                'fish_caught_id': position.get('fish_caught_id')
+            }
+            
+            return web.json_response(formatted_position)
+            
+        except ValueError:
+            return web.json_response({'error': 'Invalid user ID'}, status=400)
+        except Exception as e:
+            logger.error(f"Error getting user position: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def create_position(self, request):
+        """Create a new fishing position (cast)"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            data = await request.json()
+            
+            # Validate required fields
+            required_fields = ['pond_id', 'rod_id', 'entry_price']
+            for field in required_fields:
+                if field not in data:
+                    return web.json_response({'error': f'Missing field: {field}'}, status=400)
+            
+            pond_id = int(data['pond_id'])
+            rod_id = int(data['rod_id'])
+            entry_price = float(data['entry_price'])
+            
+            # Check if user already has active position
+            existing_position = await get_active_position(user_id)
+            if existing_position:
+                return web.json_response({
+                    'success': False,
+                    'error': 'active_position_exists'
+                }, status=400)
+            
+            # Check and consume BAIT
+            user = await get_user(user_id)
+            if not user or user['bait_tokens'] <= 0:
+                return web.json_response({
+                    'success': False,
+                    'error': 'insufficient_bait'
+                }, status=400)
+            
+            # Ensure user has active rod
+            await ensure_user_has_active_rod(user_id)
+            
+            # Use BAIT token
+            await use_bait(user_id)
+            
+            # Create position
+            await create_position_with_gear(user_id, pond_id, rod_id, entry_price)
+            
+            # Get the created position
+            new_position = await get_active_position(user_id)
+            
+            return web.json_response({
+                'success': True,
+                'position': {
+                    'id': new_position['id'],
+                    'pond_id': new_position['pond_id'],
+                    'rod_id': new_position['rod_id'],
+                    'entry_price': float(new_position['entry_price']),
+                    'entry_time': new_position['entry_time'].isoformat() if new_position['entry_time'] else None
+                }
+            })
+            
+        except ValueError as e:
+            return web.json_response({'error': f'Invalid data: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f"Error creating position: {e}")
+            return web.json_response({
+                'success': False,
+                'error': 'database_error'
+            }, status=500)
+    
+    async def complete_position(self, request):
+        """Complete fishing position (hook)"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            
+            # Check if user has active position
+            position = await get_active_position(user_id)
+            if not position:
+                return web.json_response({
+                    'success': False,
+                    'error': 'no_active_position'
+                }, status=400)
+            
+            # Get pond and rod data for the position
+            pond = await get_pond_by_id(position['pond_id']) if position['pond_id'] else None
+            rod = await get_rod_by_id(position['rod_id']) if position['rod_id'] else None
+            
+            # Get base currency for price fetching
+            base_currency = pond['base_currency'] if pond else 'ETH'
+            leverage = rod['leverage'] if rod else 1.5
+            entry_price = position['entry_price']
+            
+            # Calculate fishing time for quick fishing check
+            from src.database.db_manager import get_fishing_time_seconds
+            fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
+            
+            # Get current price
+            from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
+            current_price = await get_crypto_price_util(base_currency)
+            
+            # Calculate P&L
+            from src.utils.crypto_price import calculate_pnl
+            pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+            
+            # Quick fishing check - prevent fishing in under 60 seconds with minimal P&L
+            if fishing_time_seconds < 60 and abs(pnl_percent) < 0.1:
+                from src.bot.message_templates import get_quick_fishing_message
+                quick_message = get_quick_fishing_message(fishing_time_seconds)
+                return web.json_response({
+                    'success': False,
+                    'error': 'quick_fishing',
+                    'message': quick_message,
+                    'fishing_time_seconds': fishing_time_seconds,
+                    'pnl_percent': pnl_percent
+                }, status=400)
+            
+            # Get user level
+            user = await get_user(user_id)
+            user_level = user['level'] if user else 1
+            
+            # Get suitable fish
+            fish_data = await get_suitable_fish(
+                pnl_percent, 
+                user_level,
+                position['pond_id'] if position['pond_id'] else 1,
+                position['rod_id'] if position['rod_id'] else 1
+            )
+            
+            if not fish_data:
+                # Fallback to any fish within range
+                fish_data = await get_suitable_fish(pnl_percent, 1, 1, 1)
+            
+            if fish_data:
+                # Generate catch story
+                from src.bot.message_templates import get_catch_story_from_db
+                catch_story = get_catch_story_from_db(fish_data)
+                
+                # Generate fish card image
+                from src.generators.fish_card_generator import generate_fish_card_from_db
+                card_image = await generate_fish_card_from_db(fish_data)
+                
+                # Close position with fish ID
+                await close_position(position['id'], current_price, pnl_percent, fish_data['id'])
+                
+                # Return success with fish data
+                return web.json_response({
+                    'success': True,
+                    'fish': {
+                        'id': fish_data['id'],
+                        'name': fish_data['name'],
+                        'emoji': fish_data['emoji'],
+                        'description': fish_data['description'],
+                        'rarity': fish_data['rarity'],
+                        'image_path': card_image,
+                        'catch_story': catch_story
+                    },
+                    'result': {
+                        'pnl_percent': pnl_percent,
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'fishing_time_seconds': fishing_time_seconds,
+                        'pond_name': pond['name'] if pond else 'Unknown Pond',
+                        'rod_name': rod['name'] if rod else 'Unknown Rod'
+                    }
+                })
+            else:
+                # Emergency fallback
+                await close_position(position['id'], current_price, pnl_percent, None)
+                return web.json_response({
+                    'success': True,
+                    'fish': None,
+                    'result': {
+                        'pnl_percent': pnl_percent,
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'fishing_time_seconds': fishing_time_seconds,
+                        'pond_name': pond['name'] if pond else 'Unknown Pond',
+                        'rod_name': rod['name'] if rod else 'Unknown Rod'
+                    },
+                    'message': f'Caught something strange! P&L: {pnl_percent:+.1f}%'
+                })
+                
+        except ValueError as e:
+            return web.json_response({'error': f'Invalid data: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f"Error completing position: {e}")
+            return web.json_response({
+                'success': False,
+                'error': 'internal_error',
+                'message': str(e)
+            }, status=500)
+    
+    async def get_crypto_price(self, request):
+        """Get current cryptocurrency price"""
+        try:
+            symbol = request.match_info['symbol'].upper()
+            
+            # Validate symbol
+            valid_symbols = ['ETH', 'BTC', 'SOL', 'ADA', 'MATIC', 'AVAX', 'LINK', 'DOT']
+            if symbol not in valid_symbols:
+                return web.json_response({'error': f'Unsupported symbol: {symbol}'}, status=400)
+            
+            # Get price from crypto price utility
+            current_price = await get_crypto_price_util(symbol)
+            
+            # Return formatted price data
+            return web.json_response({
+                'symbol': symbol,
+                'current_price': float(current_price),
+                'price_change_24h': None,  # Could be enhanced to include 24h change
+                'last_updated': datetime.utcnow().isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting crypto price for {symbol}: {e}")
+            return web.json_response({'error': 'Price fetch failed'}, status=500)
+    
+    async def get_bot_info(self, request):
+        """Get bot information including username"""
+        try:
+            # Get bot username from environment or extract from token
+            import os
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            
+            if not bot_token:
+                return web.json_response({'error': 'Bot token not configured'}, status=500)
+            
+            # Extract bot ID from token (everything before first colon)
+            bot_id = bot_token.split(':')[0]
+            
+            # Make API call to Telegram to get bot info
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.telegram.org/bot{bot_token}/getMe"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('ok'):
+                            bot_info = data.get('result', {})
+                            return web.json_response({
+                                'username': bot_info.get('username'),
+                                'first_name': bot_info.get('first_name'),
+                                'id': bot_info.get('id')
+                            })
+                    
+                    return web.json_response({'error': 'Failed to get bot info'}, status=500)
+                    
+        except Exception as e:
+            logger.error(f"Error getting bot info: {e}")
             return web.json_response({'error': 'Internal server error'}, status=500)
 
 # Global server instance

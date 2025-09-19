@@ -10,8 +10,8 @@ if (tg) {
     // Hide main button by default
     tg.MainButton.hide();
     
-    // Enable closing confirmation
-    tg.enableClosingConfirmation();
+    // Don't enable closing confirmation for fishing commands
+    // tg.enableClosingConfirmation();
 }
 
 // Log mode in development
@@ -29,6 +29,7 @@ let fishHistory = {};
 let activeRod = null;
 let currentRodIndex = 0;
 let userBalance = null;
+let activePosition = null;
 
 // === UTILITY FUNCTIONS ===
 function getUserIdFromTelegram() {
@@ -108,6 +109,22 @@ async function loadUserBalance() {
         console.error('Failed to load user balance:', error);
     }
 }
+
+async function loadActivePosition() {
+    try {
+        const userId = getUserIdFromTelegram();
+        activePosition = await apiRequest(`/user/${userId}/position`);
+        updateCastHookButton();
+    } catch (error) {
+        console.error('Failed to load active position:', error);
+        activePosition = null;
+        updateCastHookButton();
+    }
+}
+
+
+// Make loadActivePosition available globally for cast-screen.js
+window.loadActivePosition = loadActivePosition;
 
 async function loadFishCollection() {
     const grid = document.getElementById('fish-grid');
@@ -226,6 +243,23 @@ function updatePlayerStats() {
     
     const rodsCountElement = document.getElementById('rods-count');
     if (rodsCountElement) rodsCountElement.textContent = userData.rods_count || 0;
+}
+
+function updateCastHookButton() {
+    const castButton = document.getElementById('cast-btn');
+    if (!castButton) return;
+    
+    if (activePosition) {
+        // User has active position - show Hook button
+        castButton.innerHTML = '<span class="menu-label">Hook</span>';
+        castButton.classList.add('hook-mode');
+        castButton.onclick = handleHookAction;
+    } else {
+        // No active position - show Cast button
+        castButton.innerHTML = '<span class="menu-label">Cast</span>';
+        castButton.classList.remove('hook-mode');
+        castButton.onclick = handleCastAction;
+    }
 }
 
 function updateBalanceDisplay() {
@@ -606,22 +640,51 @@ function updateCharacterVisual() {
     }
 }
 
-function showMessage(text, duration = 2000) {
-    // Simple toast notification
+function showMessage(text, type = 'info', duration = 3000) {
+    // Simple toast notification with type support
     const toast = document.createElement('div');
-    toast.className = 'toast-message';
+    toast.className = `toast-message toast-${type}`;
     toast.textContent = text;
+    
+    // Different colors for different message types
+    let backgroundColor, borderColor;
+    switch (type) {
+        case 'success':
+            backgroundColor = 'rgba(76, 175, 80, 0.9)';
+            borderColor = '#4CAF50';
+            break;
+        case 'error':
+            backgroundColor = 'rgba(244, 67, 54, 0.9)';
+            borderColor = '#f44336';
+            break;
+        case 'warning':
+            backgroundColor = 'rgba(255, 152, 0, 0.9)';
+            borderColor = '#FF9800';
+            break;
+        case 'info':
+        default:
+            backgroundColor = 'rgba(33, 150, 243, 0.9)';
+            borderColor = '#2196F3';
+            break;
+    }
+    
     toast.style.cssText = `
         position: fixed;
         top: 20px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.8);
+        background: ${backgroundColor};
         color: white;
         padding: 12px 24px;
         border-radius: 20px;
+        border: 2px solid ${borderColor};
         z-index: 1000;
         font-weight: 500;
+        max-width: 90%;
+        text-align: center;
+        word-wrap: break-word;
+        white-space: pre-line;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     `;
     
     document.body.appendChild(toast);
@@ -749,25 +812,33 @@ function closeFishModal() {
 }
 
 // === TELEGRAM INTEGRATION ===
-function castInTelegram() {
+
+// === CAST/HOOK ACTION HANDLERS ===
+function handleCastAction() {
+    // Send /cast command to Telegram chat
+    sendTelegramCommand('/cast');
+}
+
+function handleHookAction() {
+    // Send /hook command to Telegram chat
+    sendTelegramCommand('/hook');
+}
+
+function sendTelegramCommand(command) {
     if (tg) {
-        // Уведомляем Telegram что пользователь хочет использовать команду
-        tg.sendData(JSON.stringify({
-            action: 'cast',
-            userId: getUserIdFromTelegram()
-        }));
-        
-        // Закрываем WebApp
+        // Просто отправляем команду как текст
+        tg.sendData(command);
         tg.close();
     } else {
-        // Fallback для тестирования в development mode
-        if (appConfig.isDevelopment) {
-            showMessage('🎣 In real app, bot chat will open for fishing!', 3000);
+        // Fallback for development/testing
+        if (appConfig.DEBUG) {
+            showMessage(`Would send command: ${command}`, 'info', 2000);
         } else {
-            alert('In real app, bot chat will open for fishing!');
+            alert(`Would send command: ${command}`);
         }
     }
 }
+
 
 // === IMAGE LOADING HELPERS ===
 function handleImageLoad(img) {
@@ -858,7 +929,8 @@ document.addEventListener('DOMContentLoaded', function() {
         showScreen('collection');
     });
     
-    document.getElementById('cast-btn').addEventListener('click', castInTelegram);
+    // Note: Cast button handler is set dynamically by updateCastHookButton()
+    // Initial setup will be handled by loadActivePosition() in initializeApp()
     
     // Кнопки "Назад"
     document.getElementById('collection-back-btn').addEventListener('click', function() {
@@ -900,7 +972,26 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Кнопка "Забросить удочку" в пустой коллекции
         if (e.target.id === 'empty-state-cast-btn') {
-            castInTelegram();
+            sendTelegramCommand('/cast');
+        }
+        
+        // BAIT purchase - клик на баланс BAIT
+        if (e.target.closest('.stat-display') && 
+            (e.target.id === 'player-bait' || e.target.id === 'bottom-player-bait' || 
+             e.target.closest('.stat-display').querySelector('#player-bait') ||
+             e.target.closest('.stat-display').querySelector('#bottom-player-bait'))) {
+            openPurchaseModal();
+        }
+        
+        // Purchase modal close
+        if (e.target.id === 'purchase-modal-close') {
+            closePurchaseModal();
+        }
+        
+        // Product selection in purchase modal
+        if (e.target.closest('.product-option')) {
+            const productId = e.target.closest('.product-option').dataset.productId;
+            purchaseProduct(productId);
         }
     });
     
@@ -908,6 +999,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('fish-modal').addEventListener('click', function(e) {
         if (e.target === this) {
             closeFishModal();
+        }
+    });
+    
+    // Закрытие purchase модалки по клику вне её
+    document.getElementById('purchase-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closePurchaseModal();
         }
     });
     
@@ -923,14 +1021,169 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// === PURCHASE SYSTEM ===
+
+// Global products data
+let availableProducts = [];
+
+async function loadProducts() {
+    try {
+        const response = await apiRequest('/api/products');
+        availableProducts = response.products || [];
+    } catch (error) {
+        console.error('Failed to load products:', error);
+        availableProducts = [];
+    }
+}
+
+function openPurchaseModal() {
+    const modal = document.getElementById('purchase-modal');
+    const baitBalance = document.getElementById('modal-bait-balance');
+    
+    // Update balance in modal
+    if (userData && userData.bait_tokens !== undefined) {
+        baitBalance.textContent = userData.bait_tokens;
+    }
+    
+    // Load and display products
+    displayProducts();
+    
+    // Show modal
+    modal.classList.add('active');
+    
+    // Add clickable class to BAIT displays
+    const baitDisplays = document.querySelectorAll('.stat-display');
+    baitDisplays.forEach(display => {
+        if (display.querySelector('#player-bait') || display.querySelector('#bottom-player-bait')) {
+            display.classList.add('clickable');
+        }
+    });
+}
+
+function closePurchaseModal() {
+    const modal = document.getElementById('purchase-modal');
+    modal.classList.remove('active');
+    
+    // Remove clickable class
+    const baitDisplays = document.querySelectorAll('.stat-display.clickable');
+    baitDisplays.forEach(display => display.classList.remove('clickable'));
+}
+
+async function displayProducts() {
+    const container = document.getElementById('purchase-options');
+    
+    if (availableProducts.length === 0) {
+        await loadProducts();
+    }
+    
+    if (availableProducts.length === 0) {
+        container.innerHTML = '<div class="loading">No products available</div>';
+        return;
+    }
+    
+    const productsHTML = availableProducts.map((product, index) => {
+        const isBestValue = index === 1; // Medium pack is best value
+        const savings = index === 2 ? Math.round(((product.bait_amount * 10 - product.stars_price) / (product.bait_amount * 10)) * 100) : 0;
+        
+        return `
+            <div class="product-option ${isBestValue ? 'best-value' : ''}" 
+                 data-product-id="${product.id}">
+                <div class="product-title">
+                    🪱 ${product.bait_amount} BAIT Tokens
+                </div>
+                <div class="product-details">
+                    ${product.description}
+                    ${savings > 0 ? `<br><strong>Save ${savings}%!</strong>` : ''}
+                </div>
+                <div class="product-price">
+                    ⭐ ${product.stars_price} Stars
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = productsHTML;
+}
+
+async function purchaseProduct(productId) {
+    if (!tg) {
+        showError('Telegram WebApp not available');
+        return;
+    }
+    
+    try {
+        const userId = getUserIdFromTelegram();
+        
+        // Create purchase invoice
+        const response = await apiRequest(`/api/user/${userId}/purchase`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                product_id: parseInt(productId),
+                quantity: 1
+            })
+        });
+        
+        const { invoice_data, purchase_info } = response;
+        
+        // Show invoice using Telegram WebApp
+        tg.showInvoice(invoice_data.payload, (status) => {
+            if (status === 'paid') {
+                showSuccess(`🎉 Payment successful! ${purchase_info.bait_amount} BAIT tokens added to your account!`);
+                closePurchaseModal();
+                // Reload user data to update balance
+                loadUserData();
+            } else if (status === 'cancelled') {
+                showInfo('Payment cancelled');
+            } else if (status === 'failed') {
+                showError('Payment failed. Please try again.');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Purchase error:', error);
+        showError('Failed to create purchase. Please try again.');
+    }
+}
+
+// Helper functions for notifications
+function showSuccess(message) {
+    if (tg) {
+        tg.showAlert(message);
+    } else {
+        alert(message);
+    }
+}
+
+function showInfo(message) {
+    if (tg) {
+        tg.showAlert(message);
+    } else {
+        alert(message);
+    }
+}
+
+function showError(message) {
+    if (tg) {
+        tg.showAlert(message);
+    } else {
+        alert(message);
+    }
+}
+
 // === APP INITIALIZATION ===
 async function initializeApp() {
     try {
-        // Загружаем данные пользователя и активную удочку параллельно
+        // Загружаем данные пользователя, активную удочку, позицию и продукты параллельно
         // updateCharacterVisual() вызывается автоматически в loadActiveRod()
+        // updateCastHookButton() вызывается автоматически в loadActivePosition()
         await Promise.all([
             loadUserData(),
-            loadActiveRod()
+            loadActiveRod(),
+            loadActivePosition(),
+            loadProducts()
         ]);
     } catch (error) {
         console.error('Failed to initialize app:', error);

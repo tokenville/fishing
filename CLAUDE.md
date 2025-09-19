@@ -48,6 +48,7 @@ src/
 │   ├── leaderboard_commands.py   # Leaderboard and test commands (163 lines)
 │   ├── group_commands.py         # Group commands and callbacks (280 lines)
 │   ├── private_fishing_helpers.py # Helper functions for private fishing (318 lines)
+│   ├── payment_commands.py       # Telegram Stars payment handlers (320 lines)
 │   ├── group_handlers.py         # Group management handlers (121 lines)
 │   ├── animations.py             # Fishing animations and status updates (220 lines)
 │   └── message_templates.py      # Dynamic message templates from database (440 lines)
@@ -84,6 +85,7 @@ webapp/
 - `src/bot/leaderboard_commands.py` - **NEW**: Rankings and test commands (163 lines)
 - `src/bot/group_commands.py` - **NEW**: Group commands and callbacks (gofishing, pond selection) (280 lines)
 - `src/bot/private_fishing_helpers.py` - **NEW**: Helper functions for private fishing operations (318 lines)
+- `src/bot/payment_commands.py` - **NEW**: Telegram Stars payment handlers (buy, transactions, invoice processing) (320 lines)
 - `src/bot/group_handlers.py` - Group event handlers (bot addition, member changes) (121 lines)
 - `src/bot/animations.py` - Fishing animations and status updates (220 lines)
 - `src/bot/message_templates.py` - Dynamic message templates from database (440 lines)
@@ -201,6 +203,8 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
   - **In private chats**: Shows global leaderboard with personal user stats and ranking
 - `/leaderboard week` - Weekly leaderboard rankings (group-specific in groups, global in private)
 - `/help` - Show dynamic game rules generated from database (always up-to-date)
+- `/buy` - **NEW**: Purchase BAIT tokens with Telegram Stars (shows interactive product selection)
+- `/transactions` - **NEW**: View purchase history and transaction status
 - `/test_card` - Generate test fish cards (development only)
 
 ## Important Notes
@@ -232,6 +236,86 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 - **Dynamic Content**: Help, stories, and fish selection all driven by database
 - **Migration System**: Automatic schema updates for existing installations
 - **AI Prompt Storage**: Database-stored AI prompts for each fish with management tools
+- **Payment System**: Secure Telegram Stars integration with transaction tracking
+
+## 💰 Payment System (Telegram Stars)
+
+### Overview
+The bot now supports purchasing BAIT tokens using Telegram Stars, providing a secure, integrated payment solution directly within Telegram.
+
+### Key Features
+- **Secure Payments**: Uses Telegram's native Stars payment system for digital goods
+- **Three Package Options**: 10, 50, or 100 BAIT tokens with competitive pricing
+- **Dual Purchase Entry Points**: 
+  1. When user runs out of BAIT (automatic offer with purchase buttons)
+  2. WebApp interface (click on BAIT balance in lobby screen)
+- **Complete Transaction Tracking**: All purchases recorded in database with status management
+- **Automatic Token Delivery**: BAIT tokens added instantly upon successful payment
+- **Purchase History**: `/transactions` command shows detailed purchase history
+
+### Product Packages
+```
+🪱 BAIT Pack Small:  10 tokens for ⭐100 Stars
+🪱 BAIT Pack Medium: 50 tokens for ⭐450 Stars (🔥 BEST VALUE)
+🪱 BAIT Pack Large:  100 tokens for ⭐800 Stars (Save 20%)
+```
+
+### Payment Flow
+1. **Purchase Trigger**: User selects package via `/buy` command or WebApp
+2. **Invoice Creation**: System generates Telegram invoice with secure payload
+3. **Pre-Checkout Validation**: Bot validates order details and user status
+4. **Payment Processing**: Telegram handles secure Stars payment
+5. **Token Delivery**: BAIT tokens added immediately to user account
+6. **Confirmation**: Success message with updated balance
+
+### Database Schema (Payment Tables)
+```sql
+-- Products table for BAIT packages
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    bait_amount INTEGER NOT NULL,
+    stars_price INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Transactions table for payment tracking
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(telegram_id),
+    product_id INTEGER REFERENCES products(id),
+    quantity INTEGER DEFAULT 1,
+    stars_amount INTEGER NOT NULL,
+    bait_amount INTEGER NOT NULL,
+    payment_charge_id TEXT UNIQUE,
+    telegram_payment_charge_id TEXT,
+    provider_payment_charge_id TEXT,
+    status TEXT DEFAULT 'pending',
+    payload TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+```
+
+### WebApp Integration
+- **Clickable BAIT Balance**: Users can click their BAIT balance in lobby to open purchase modal
+- **Interactive Purchase Modal**: Beautiful UI with product selection and pricing
+- **Telegram WebApp Payment**: Seamless integration with Telegram's payment interface
+- **Real-time Updates**: BAIT balance updates immediately after purchase
+
+### Security Features
+- **Payload Validation**: Unique transaction payloads prevent replay attacks
+- **Amount Verification**: Pre-checkout validation ensures price integrity
+- **User Authentication**: All purchases tied to authenticated Telegram users
+- **Transaction Logging**: Comprehensive audit trail for all payment operations
+- **Refund Support**: Built-in refund functionality for dispute resolution
+
+### Commands & Usage
+- `/buy` - Opens purchase interface with product selection
+- `/transactions` - Shows purchase history and transaction status
+- **No BAIT Scenario**: Automatic purchase offer when user tries to fish without BAIT
+- **WebApp Purchase**: Click BAIT balance in Mini App for instant purchase modal
 
 ### Enhanced Fish System Features:
 - **Massive Fish Variety**: 87 unique absurd fish across all PnL ranges
@@ -304,6 +388,9 @@ CREATE TABLE user_settings (
 ### API Endpoints
 - `GET /api/user/{user_id}/active-rod` → Returns current active rod data
 - `POST /api/user/{user_id}/active-rod` → Updates user's active rod selection
+- `GET /api/products` → **NEW**: Returns available BAIT products for purchase
+- `GET /api/user/{user_id}/transactions` → **NEW**: Returns user's transaction history
+- `POST /api/user/{user_id}/purchase` → **NEW**: Creates purchase invoice for WebApp payment
 
 ### Frontend Implementation
 ```javascript

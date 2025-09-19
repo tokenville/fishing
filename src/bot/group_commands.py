@@ -14,6 +14,7 @@ from src.database.db_manager import (
 )
 from src.utils.crypto_price import get_crypto_price
 from src.bot.animations import safe_reply
+from src.bot.random_messages import get_random_cast_appendix
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ async def pond_selection_callback(update: Update, context: ContextTypes.DEFAULT_
         
         # Use bait
         if not await use_bait(user_id):
-            await query.edit_message_text("🎣 No $BAIT tokens! Need more worms for fishing 🪱")
+            await query.edit_message_text("🎣 No $BAIT tokens! Use /buy command to purchase more 🪱")
             return
         
         # Get user's active rod
@@ -155,9 +156,10 @@ async def pond_selection_callback(update: Update, context: ContextTypes.DEFAULT_
         if pond.get('pond_type') == 'group' and pond.get('chat_id'):
             try:
                 # Create a fake update object for the group message
+                cast_appendix = get_random_cast_appendix()
                 await context.bot.send_message(
                     chat_id=pond['chat_id'],
-                    text=f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>",
+                    text=f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>. {cast_appendix}",
                     parse_mode='HTML'
                 )
             except Exception as e:

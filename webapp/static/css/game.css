@@ -446,6 +446,161 @@ body::after {
     background: linear-gradient(135deg, #FF5722 0%, #FF9800 50%, #FF5722 100%);
 }
 
+/* Hook mode styling - when user has active fishing position */
+.bottom-menu-btn.main-action.hook-mode {
+    background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 50%, #4CAF50 100%);
+    box-shadow: 
+        4px 4px 0 #000,
+        8px 8px 20px rgba(76, 175, 80, 0.4);
+    animation: hookPulse 2s infinite;
+}
+
+.bottom-menu-btn.main-action.hook-mode:hover {
+    background: linear-gradient(135deg, #388E3C 0%, #689F38 50%, #388E3C 100%);
+    box-shadow: 
+        6px 6px 0 #000,
+        12px 12px 30px rgba(76, 175, 80, 0.6);
+}
+
+.bottom-menu-btn.main-action.hook-mode::before {
+    content: '🪝';
+    font-size: 18px;
+    animation: hookFloat 3s infinite;
+}
+
+.bottom-menu-btn.main-action.hook-mode::after {
+    content: '🪝';
+    font-size: 14px;
+    animation: hookFloat 3s infinite 1s;
+}
+
+@keyframes hookPulse {
+    0%, 100% { box-shadow: 4px 4px 0 #000, 8px 8px 20px rgba(76, 175, 80, 0.4); }
+    50% { box-shadow: 4px 4px 0 #000, 8px 8px 25px rgba(76, 175, 80, 0.7); }
+}
+
+@keyframes hookFloat {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    25% { transform: scale(1.1) rotate(-10deg); }
+    75% { transform: scale(1.1) rotate(10deg); }
+}
+
+/* Hook result modal styling */
+.fish-hook-result {
+    max-width: 500px;
+    width: 100%;
+}
+
+.hook-result-header h2 {
+    color: #4CAF50;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+}
+
+.fish-result-display {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    align-items: flex-start;
+}
+
+.fish-result-image-container {
+    flex-shrink: 0;
+    width: 150px;
+    height: 150px;
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #2a2a2a;
+}
+
+.fish-result-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.fish-result-emoji-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 64px;
+    background: #2a2a2a;
+}
+
+.fish-result-info {
+    flex: 1;
+}
+
+.fish-result-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.fish-result-description {
+    color: #b0c4de;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+}
+
+.hook-result-story {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+    border-left: 4px solid #4CAF50;
+}
+
+.hook-result-story p {
+    margin: 0;
+    color: #ffffff;
+    font-style: italic;
+}
+
+.hook-result-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.hook-stat {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.hook-stat strong {
+    color: #87CEEB;
+}
+
+.hook-stat .profit {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.hook-stat .loss {
+    color: #f44336;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .fish-result-display {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .hook-result-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
 .menu-icon {
     width: 32px;
     height: 32px;
@@ -1624,5 +1779,206 @@ body::after {
     .character-rod .short-rod {
         right: -17%;
     }
+}
+
+/* Purchase Modal Styles */
+.purchase-modal-content {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    border: 4px solid #000;
+    border-radius: 20px;
+    max-width: 400px;
+    margin: 5% auto;
+    box-shadow: 
+        8px 8px 0 #000,
+        16px 16px 40px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease-out;
+    position: relative;
+    height: auto;
+    padding: 0;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.purchase-modal-content .modal-header {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    border-bottom: 4px solid #000;
+    padding: 20px;
+    text-align: center;
+    position: relative;
+}
+
+.purchase-modal-content .modal-header h2 {
+    margin: 0;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-size: 28px;
+    font-weight: 700;
+    color: #000;
+    text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.3);
+}
+
+.modal-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: #e74c3c;
+    border: 3px solid #000;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #000;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+.purchase-modal-content .modal-body {
+    padding: 30px 20px;
+    color: #fff;
+}
+
+.current-balance {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 3px solid #000;
+    border-radius: 15px;
+    position: relative;
+}
+
+.current-balance h3 {
+    margin: 0;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-size: 24px;
+    color: #f1c40f;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.purchase-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.product-option {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border: 4px solid #000;
+    border-radius: 15px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    text-align: center;
+    color: #000;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-weight: 700;
+}
+
+.product-option:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        4px 6px 0 #000,
+        8px 12px 20px rgba(52, 152, 219, 0.3);
+}
+
+.product-option.best-value {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    border-color: #ffd700;
+    border-width: 5px;
+}
+
+.product-option.best-value::before {
+    content: '🔥 BEST VALUE';
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ffd700;
+    border: 3px solid #000;
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-size: 14px;
+    font-weight: 900;
+    color: #000;
+    box-shadow: 2px 2px 0 #000;
+}
+
+.product-title {
+    font-size: 20px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.product-details {
+    font-size: 16px;
+    margin-bottom: 10px;
+    opacity: 0.9;
+}
+
+.product-price {
+    font-size: 18px;
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.payment-info {
+    text-align: center;
+    font-size: 14px;
+    color: #bdc3c7;
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
+    padding-top: 20px;
+}
+
+.payment-info p {
+    margin: 8px 0;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    font-family: 'Caveat', 'Comic Sans MS', cursive;
+    font-size: 18px;
+    color: #bdc3c7;
+}
+
+/* Clickable BAIT balance */
+.stat-display.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.stat-display.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        4px 6px 0 #000,
+        8px 12px 20px rgba(255, 255, 255, 0.2);
+}
+
+.stat-display.clickable:active {
+    transform: translateY(0);
 }
 

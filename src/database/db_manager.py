@@ -343,10 +343,46 @@ async def init_database():
             )
         ''')
         
+        # Create products table for BAIT packages
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                bait_amount INTEGER NOT NULL,
+                stars_price INTEGER NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create transactions table for payment tracking  
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                product_id INTEGER,
+                quantity INTEGER DEFAULT 1,
+                stars_amount INTEGER NOT NULL,
+                bait_amount INTEGER NOT NULL,
+                payment_charge_id TEXT UNIQUE,
+                telegram_payment_charge_id TEXT,
+                provider_payment_charge_id TEXT,
+                status TEXT DEFAULT 'pending',
+                payload TEXT,
+                invoice_payload TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (product_id) REFERENCES products (id)
+            )
+        ''')
+        
         # Insert default data
         await _insert_default_ponds(conn)
         await _insert_default_rods(conn)
         await _insert_default_fish(conn)
+        await _insert_default_products(conn)
         
     print("Database initialized successfully!")
 
@@ -499,6 +535,21 @@ async def _insert_default_fish(conn: asyncpg.Connection):
                                 required_ponds, required_rods, rarity, story_template, ai_prompt)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ''', fish_data)
+
+async def _insert_default_products(conn: asyncpg.Connection):
+    """Insert default BAIT products if they don't exist"""
+    count = await conn.fetchval('SELECT COUNT(*) FROM products')
+    if count == 0:
+        products_data = [
+            ('BAIT Pack Small', '10 BAIT tokens for fishing', 10, 100, True),
+            ('BAIT Pack Medium', '50 BAIT tokens for fishing', 50, 450, True),
+            ('BAIT Pack Large', '100 BAIT tokens for fishing', 100, 800, True)
+        ]
+        
+        await conn.executemany('''
+            INSERT INTO products (name, description, bait_amount, stars_price, is_active)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', products_data)
 
 async def get_available_ponds(user_level: int) -> List[asyncpg.Record]:
     """Get ponds available for user level"""
@@ -1296,3 +1347,147 @@ async def update_group_member_count(chat_id: int, member_count: int):
             ''', new_name, member_count, chat_id)
             
             logger.info(f"Updated group pond member count: {new_name} ({member_count} members)")
+
+# === PAYMENTS & TRANSACTIONS SYSTEM ===
+
+async def get_available_products() -> List[asyncpg.Record]:
+    """Get all available BAIT products"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
+            SELECT * FROM products 
+            WHERE is_active = true
+            ORDER BY stars_price ASC
+        ''')
+
+async def get_product_by_id(product_id: int) -> Optional[asyncpg.Record]:
+    """Get product by ID"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT * FROM products WHERE id = $1 AND is_active = true
+        ''', product_id)
+
+async def create_transaction(user_id: int, product_id: int, quantity: int, 
+                           stars_amount: int, bait_amount: int, payload: str) -> str:
+    """Create new transaction and return unique transaction ID"""
+    import uuid
+    transaction_id = str(uuid.uuid4())
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO transactions 
+            (user_id, product_id, quantity, stars_amount, bait_amount, payload, status)
+            VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+        ''', user_id, product_id, quantity, stars_amount, bait_amount, payload)
+    
+    return transaction_id
+
+async def get_transaction_by_payload(payload: str) -> Optional[asyncpg.Record]:
+    """Get transaction by payload"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT * FROM transactions WHERE payload = $1
+        ''', payload)
+
+async def complete_transaction(transaction_id: int, payment_charge_id: str, 
+                             telegram_payment_charge_id: str, provider_payment_charge_id: str) -> bool:
+    """Complete transaction and add BAIT tokens to user"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Get transaction info
+            transaction = await conn.fetchrow('''
+                SELECT * FROM transactions WHERE id = $1 AND status = 'pending'
+            ''', transaction_id)
+            
+            if not transaction:
+                return False
+            
+            # Update transaction status
+            await conn.execute('''
+                UPDATE transactions 
+                SET status = 'completed', 
+                    payment_charge_id = $1,
+                    telegram_payment_charge_id = $2,
+                    provider_payment_charge_id = $3,
+                    completed_at = CURRENT_TIMESTAMP
+                WHERE id = $4
+            ''', payment_charge_id, telegram_payment_charge_id, provider_payment_charge_id, transaction_id)
+            
+            # Add BAIT tokens to user
+            bait_to_add = transaction['bait_amount'] * transaction['quantity']
+            await conn.execute('''
+                UPDATE users 
+                SET bait_tokens = bait_tokens + $1
+                WHERE telegram_id = $2
+            ''', bait_to_add, transaction['user_id'])
+            
+            logger.info(f"Transaction {transaction_id} completed: added {bait_to_add} BAIT to user {transaction['user_id']}")
+            return True
+
+async def fail_transaction(transaction_id: int, error_message: str = None) -> bool:
+    """Mark transaction as failed"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('''
+            UPDATE transactions 
+            SET status = 'failed'
+            WHERE id = $1 AND status = 'pending'
+        ''', transaction_id)
+        return result.split()[-1] != '0'
+
+async def get_user_transactions(user_id: int, limit: int = 10) -> List[asyncpg.Record]:
+    """Get user's transaction history"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch('''
+            SELECT t.*, p.name as product_name, p.description as product_description
+            FROM transactions t
+            LEFT JOIN products p ON t.product_id = p.id
+            WHERE t.user_id = $1
+            ORDER BY t.created_at DESC
+            LIMIT $2
+        ''', user_id, limit)
+
+async def refund_transaction(transaction_id: int) -> bool:
+    """Refund a completed transaction (subtract BAIT tokens)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Get transaction info
+            transaction = await conn.fetchrow('''
+                SELECT * FROM transactions WHERE id = $1 AND status = 'completed'
+            ''', transaction_id)
+            
+            if not transaction:
+                return False
+            
+            # Check if user has enough BAIT tokens
+            user = await conn.fetchrow('''
+                SELECT bait_tokens FROM users WHERE telegram_id = $1
+            ''', transaction['user_id'])
+            
+            bait_to_subtract = transaction['bait_amount'] * transaction['quantity']
+            if user['bait_tokens'] < bait_to_subtract:
+                logger.warning(f"Cannot refund transaction {transaction_id}: user has insufficient BAIT tokens")
+                return False
+            
+            # Update transaction status
+            await conn.execute('''
+                UPDATE transactions 
+                SET status = 'refunded'
+                WHERE id = $1
+            ''', transaction_id)
+            
+            # Subtract BAIT tokens from user
+            await conn.execute('''
+                UPDATE users 
+                SET bait_tokens = bait_tokens - $1
+                WHERE telegram_id = $2
+            ''', bait_to_subtract, transaction['user_id'])
+            
+            logger.info(f"Transaction {transaction_id} refunded: subtracted {bait_to_subtract} BAIT from user {transaction['user_id']}")
+            return True

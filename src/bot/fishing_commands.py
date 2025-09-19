@@ -24,6 +24,7 @@ from src.bot.animations import (
     safe_reply, animate_hook_sequence, send_fish_card_or_fallback
 )
 from src.generators.fish_card_generator import generate_fish_card_from_db
+from src.bot.random_messages import get_random_hook_appendix
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,8 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Check if user has enough BAIT
         if user['bait_tokens'] <= 0:
-            await safe_reply(update, "🎣 No $BAIT tokens! Need more worms for fishing 🪱")
+            from src.bot.payment_commands import send_low_bait_purchase_offer
+            await send_low_bait_purchase_offer(update, context)
             return
         
         # Check if user is already fishing
@@ -336,7 +338,8 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 try:
                     # Send notification to the group
                     pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
-                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%"
+                    hook_appendix = get_random_hook_appendix()
+                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%{hook_appendix}"
                     
                     await context.bot.send_message(
                         chat_id=pond['chat_id'],

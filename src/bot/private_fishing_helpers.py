@@ -15,6 +15,7 @@ from src.database.db_manager import (
 from src.utils.crypto_price import get_crypto_price, calculate_pnl, format_time_fishing, get_fishing_time_seconds, get_price_error_message
 from src.bot.message_templates import get_catch_story_from_db, get_quick_fishing_message, format_fishing_complete_caption
 from src.generators.fish_card_generator import generate_fish_card_from_db
+from src.bot.random_messages import get_random_cast_appendix, get_random_hook_appendix
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
         if user['bait_tokens'] <= 0:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="🎣 No $BAIT tokens! Need more worms for fishing 🪱"
+                text="🎣 No $BAIT tokens! Use /buy command to purchase more 🪱"
             )
             return
         
@@ -91,7 +92,8 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
         # Send group notification if pond is a group pond
         if pond.get('pond_type') == 'group' and pond.get('chat_id'):
             try:
-                group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>"
+                cast_appendix = get_random_cast_appendix()
+                group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>. {cast_appendix}"
                 await context.bot.send_message(
                     chat_id=pond['chat_id'],
                     text=group_message,
@@ -267,7 +269,8 @@ async def complete_private_hook_from_group(user_id: int, username: str, context:
             if pond and pond.get('pond_type') == 'group' and pond.get('chat_id'):
                 try:
                     pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
-                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%"
+                    hook_appendix = get_random_hook_appendix()
+                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%{hook_appendix}"
                     
                     await context.bot.send_message(
                         chat_id=pond['chat_id'],

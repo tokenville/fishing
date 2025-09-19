@@ -171,10 +171,37 @@
             </div>
         </div>
 
+
         <!-- Fish details modal -->
         <div id="fish-modal" class="modal">
             <div class="modal-content" id="fish-details">
                 <!-- Fish details will be loaded dynamically -->
+            </div>
+        </div>
+
+        <!-- BAIT Purchase modal -->
+        <div id="purchase-modal" class="modal">
+            <div class="modal-content purchase-modal-content">
+                <div class="modal-header">
+                    <h2>🛒 Buy BAIT Tokens</h2>
+                    <button class="modal-close" id="purchase-modal-close">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="current-balance">
+                        <h3>💰 Current Balance: <span id="modal-bait-balance">-</span> BAIT</h3>
+                    </div>
+                    
+                    <div class="purchase-options" id="purchase-options">
+                        <!-- Products will be loaded dynamically -->
+                        <div class="loading">Loading products...</div>
+                    </div>
+                    
+                    <div class="payment-info">
+                        <p>⭐ <strong>Secure payment through Telegram Stars</strong></p>
+                        <p>💡 BAIT tokens are used for fishing. Each cast costs 1 BAIT!</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
