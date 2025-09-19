@@ -22,6 +22,7 @@ This is a Telegram bot for a virtual fishing game with cryptocurrency trading me
 - **🚀 Bunny CDN Integration**: Global content delivery network for lightning-fast image loading with automatic optimization
 - **💫 Smart Skeleton Loaders**: Animated loading placeholders that maintain layout and improve UX
 - **⏰ Quick Fishing Prevention**: Anti-spam system with funny messages to encourage patience and market movement
+- **🎁 Interactive Onboarding**: Story-driven inheritance system that teaches game mechanics through engaging narrative
 
 ## Architecture
 
@@ -206,6 +207,66 @@ PostgreSQL database is configured via `DATABASE_URL` environment variable with:
 - `/buy` - **NEW**: Purchase BAIT tokens with Telegram Stars (shows interactive product selection)
 - `/transactions` - **NEW**: View purchase history and transaction status
 - `/test_card` - Generate test fish cards (development only)
+
+## 🎁 Interactive Onboarding System
+
+### Overview
+New users experience a story-driven onboarding through their grandfather's inheritance letter, explaining game mechanics via engaging narrative.
+
+### Crypto Anarchist Grandfather Lore
+**Backstory**: In 2009, the grandfather lost Bitcoin keys in a pond while fishing. Instead of finding them, he discovered that fishing teaches perfect trading psychology - patience, timing, and intuition. He built this game where fishing equals real crypto trades.
+
+### Onboarding Flow
+1. **First Mini App Launch**: New users see inheritance screen instead of lobby
+2. **Letter Display**: Beautifully styled inheritance letter with aged paper, wax seal (₿), and grandfather's story
+3. **Inheritance Items**:
+   - 🎣 Grandfather's magical fishing rod
+   - 💰 $10,000 starting capital
+   - 🪱 10 BAIT tokens
+4. **Accept Inheritance**: Single button interaction claims inheritance
+5. **Automatic Benefits**: 
+   - `inheritance_claimed = TRUE`
+   - `bait_tokens += 10` (was 5, updated to 10 per UI)
+   - Virtual balance = $10,000 (automatic via existing formula)
+6. **Telegram Notification**: Success message sent to user's chat
+7. **Transition**: Automatic redirect to normal lobby experience
+
+### Technical Implementation
+
+#### Database Schema
+```sql
+-- Users table includes inheritance tracking
+ALTER TABLE users ADD COLUMN inheritance_claimed BOOLEAN DEFAULT FALSE;
+```
+
+#### Key Functions
+- `claim_inheritance(user_id)` - Process inheritance claim (db_manager.py:1515)
+- `check_inheritance_status(user_id)` - Check if claimed (db_manager.py:1544)
+- `send_telegram_notification(user_id, message)` - Send success notification (animations.py:223)
+
+#### API Endpoints
+- `POST /api/user/{user_id}/claim-inheritance` - Claim inheritance
+- `GET /api/user/{user_id}/inheritance-status` - Check status
+
+#### Frontend Components
+- **inheritance-screen**: Full inheritance UI (index.html:209-253)
+- **Aged paper styling**: CSS with gradients, aged effects, wax seal (game.css:1985-2201)
+- **JavaScript logic**: Auto-show for new users, claim processing (app.js:1177-1249)
+
+### Virtual Balance Logic
+The system uses existing balance calculation:
+```sql
+balance = 10000 + COALESCE(SUM(1000 * pnl_percent / 100), 0)
+```
+
+New users with no trading positions automatically get $10,000 base balance without needing artificial positions.
+
+### Benefits
+- **Educational**: Explains fishing = trading concept through story
+- **Engaging**: Interactive narrative vs boring tutorial
+- **Memorable**: Unique grandfather story creates emotional connection
+- **Smooth**: Seamless integration with existing game systems
+- **Clean**: No artificial database entries, uses existing balance formula
 
 ## Important Notes
 

@@ -219,3 +219,27 @@ async def send_fish_card_or_fallback(animation_message, card_image, story):
                 await animation_message.reply_text(story)
             except Exception as fallback_error:
                 logger.error(f"Even fallback failed: {fallback_error}")
+
+async def send_telegram_notification(user_id: int, message: str, application=None):
+    """Send a notification message to a user via Telegram"""
+    try:
+        if application is None:
+            try:
+                from main import application  # Import application instance from main module
+            except ImportError:
+                logger.warning(f"Could not import application to send notification to user {user_id}")
+                return
+        
+        if application and application.bot:
+            await application.bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode='HTML'
+            )
+            logger.info(f"Sent notification to user {user_id}")
+        else:
+            logger.warning(f"Application or bot not available to send notification to user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send notification to user {user_id}: {e}")
+        raise

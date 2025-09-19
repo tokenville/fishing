@@ -20,14 +20,15 @@ from src.database.db_manager import (
     get_user_virtual_balance, get_flexible_leaderboard,
     get_user_group_ponds, get_active_position, create_position_with_gear,
     use_bait, ensure_user_has_active_rod, get_pond_by_id, get_rod_by_id,
-    get_suitable_fish, close_position
+    get_suitable_fish, close_position, claim_inheritance, check_inheritance_status
 )
 from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
 
 logger = logging.getLogger(__name__)
 
 class WebAppServer:
-    def __init__(self):
+    def __init__(self, application=None):
+        self.application = application
         self.app = web.Application(middlewares=[self.cors_middleware])
         self.setup_routes()
         
@@ -56,6 +57,10 @@ class WebAppServer:
         self.app.router.add_post('/api/user/{user_id}/active-rod', self.set_user_active_rod)
         self.app.router.add_get('/api/fish/{fish_id}/image', self.get_fish_image)
         
+        # Inheritance endpoint
+        self.app.router.add_post('/api/user/{user_id}/claim-inheritance', self.claim_user_inheritance)
+        self.app.router.add_get('/api/user/{user_id}/inheritance-status', self.get_inheritance_status)
+        
         # Leaderboard and balance endpoints
         self.app.router.add_get('/api/user/{user_id}/balance', self.get_user_balance)
         self.app.router.add_get('/api/leaderboard', self.get_leaderboard)
@@ -83,7 +88,6 @@ class WebAppServer:
         logger.debug(f"Serving main webapp page, request from: {request.remote}")
         try:
             webapp_path = Path('webapp/templates/index.html')
-            logger.debug(f"Trying to serve file: {webapp_path.absolute()}")
             
             if not webapp_path.exists():
                 logger.error(f"Main page file not found: {webapp_path.absolute()}")
@@ -592,6 +596,10 @@ class WebAppServer:
             if not user:
                 return web.json_response({'error': 'User not found'}, status=404)
             
+            # Check if we have access to the bot application
+            if not self.application:
+                return web.json_response({'error': 'Bot not available'}, status=500)
+            
             # Calculate totals
             total_stars = product['stars_price'] * quantity
             total_bait = product['bait_amount'] * quantity
@@ -599,15 +607,26 @@ class WebAppServer:
             # Generate payload for Telegram invoice
             payload = f"bait_{product_id}_{quantity}"
             
+            # Create invoice using bot API
+            title = f"BAIT Tokens x{quantity}"
+            description = f"{total_bait} BAIT tokens for fishing"
+            prices = [{"label": "BAIT Tokens", "amount": total_stars}]
+            
+            # Send invoice using bot
+            message = await self.application.bot.send_invoice(
+                chat_id=user_id,
+                title=title,
+                description=description,
+                payload=payload,
+                provider_token="",  # Empty for Stars
+                currency="XTR",
+                prices=prices
+            )
+            
+            # Invoice sent successfully - return success response
             return web.json_response({
-                'invoice_data': {
-                    'title': f"BAIT Tokens x{quantity}",
-                    'description': f"{total_bait} BAIT tokens for fishing",
-                    'payload': payload,
-                    'currency': 'XTR',
-                    'prices': [{'label': 'BAIT Tokens', 'amount': total_stars}],
-                    'provider_token': ''
-                },
+                'success': True,
+                'message': 'Invoice sent to your chat',
                 'purchase_info': {
                     'product_name': product['name'],
                     'bait_amount': total_bait,
@@ -920,19 +939,80 @@ class WebAppServer:
         except Exception as e:
             logger.error(f"Error getting bot info: {e}")
             return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def claim_user_inheritance(self, request):
+        """Claim inheritance for a new user"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            
+            # Claim inheritance and get result
+            success = await claim_inheritance(user_id)
+            
+            if success:
+                # Send Telegram notification
+                try:
+                    from src.bot.animations import send_telegram_notification
+                    await send_telegram_notification(
+                        user_id, 
+                        "🎁 <b>Congratulations!</b>\n\nYou received your crypto anarchist grandfather's inheritance:\n💰 $10,000 starting capital\n🪱 +10 BAIT tokens\n\n<i>Use /cast for your first fishing trade!</i>",
+                        self.application
+                    )
+                except Exception as notification_error:
+                    logger.warning(f"Failed to send inheritance notification to user {user_id}: {notification_error}")
+                
+                return web.json_response({
+                    'success': True,
+                    'message': 'Inheritance claimed successfully!',
+                    'bonus': {
+                        'virtual_balance': 10000,
+                        'bait_tokens': 10
+                    }
+                })
+            else:
+                return web.json_response({
+                    'success': False,
+                    'error': 'Inheritance already claimed or user not found'
+                }, status=400)
+                
+        except ValueError:
+            return web.json_response({'error': 'Invalid user ID'}, status=400)
+        except Exception as e:
+            logger.error(f"Error claiming inheritance for user {user_id}: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def get_inheritance_status(self, request):
+        """Check if user has claimed their inheritance"""
+        try:
+            user_id = int(request.match_info['user_id'])
+            
+            inheritance_claimed = await check_inheritance_status(user_id)
+            
+            return web.json_response({
+                'user_id': user_id,
+                'inheritance_claimed': inheritance_claimed
+            })
+            
+        except ValueError:
+            return web.json_response({'error': 'Invalid user ID'}, status=400)
+        except Exception as e:
+            logger.error(f"Error checking inheritance status for user {user_id}: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
 
 # Global server instance
-web_server = WebAppServer()
+web_server = None
 
-def create_webapp():
+def create_webapp(application=None):
     """Create and return the web application"""
+    global web_server
+    web_server = WebAppServer(application)
     return web_server.app
 
-async def start_web_server(port: int = 8080):
+async def start_web_server(port: int = 8080, application=None):
     """Start the web server"""
     try:
         logger.debug(f"Initializing web server on port {port}")
-        runner = web.AppRunner(web_server.app)
+        webapp = create_webapp(application)
+        runner = web.AppRunner(webapp)
         await runner.setup()
         logger.debug("AppRunner setup completed")
         

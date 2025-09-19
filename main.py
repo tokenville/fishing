@@ -47,6 +47,9 @@ else:
 logger = logging.getLogger(__name__)
 logger.info(f"Logging configured with level: {log_level} ({log_level_value})")
 
+# Global application instance for external access
+application = None
+
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle data from WebApp"""
     try:
@@ -141,7 +144,7 @@ async def startup(application):
     # Start web server
     port = int(os.environ.get('PORT', 8080))
     logger.debug(f"Starting web server on port {port}...")
-    web_runner = await start_web_server(port)
+    web_runner = await start_web_server(port, application)
     application.web_runner = web_runner  # Store runner for cleanup
     logger.info(f"✅ Web server started on port {port}")
     logger.debug("Application startup sequence completed")
@@ -169,6 +172,7 @@ def main():
     try:
         logger.debug("Creating bot application...")
         # Create application
+        global application
         application = create_application()
         logger.debug("Bot application created")
         

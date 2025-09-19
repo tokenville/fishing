@@ -189,9 +189,19 @@ async def init_database():
                 bait_tokens INTEGER DEFAULT 10,
                 level INTEGER DEFAULT 1,
                 experience INTEGER DEFAULT 0,
+                inheritance_claimed BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Add inheritance_claimed column if it doesn't exist (migration)
+        try:
+            await conn.execute('''
+                ALTER TABLE users ADD COLUMN inheritance_claimed BOOLEAN DEFAULT FALSE
+            ''')
+        except Exception:
+            # Column already exists, ignore error
+            pass
         
         # Create ponds table (enhanced for group support)
         await conn.execute('''
@@ -1491,3 +1501,45 @@ async def refund_transaction(transaction_id: int) -> bool:
             
             logger.info(f"Transaction {transaction_id} refunded: subtracted {bait_to_subtract} BAIT from user {transaction['user_id']}")
             return True
+
+async def claim_inheritance(user_id: int) -> bool:
+    """Claim inheritance for a new user - gives $10,000 virtual balance and 5 BAIT tokens"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Check if inheritance already claimed
+        result = await conn.fetchrow('''
+            SELECT inheritance_claimed FROM users WHERE telegram_id = $1
+        ''', user_id)
+        
+        if not result:
+            logger.warning(f"User {user_id} not found when claiming inheritance")
+            return False
+            
+        if result['inheritance_claimed']:
+            logger.warning(f"User {user_id} already claimed inheritance")
+            return False
+        
+        # Mark inheritance as claimed and give bonus BAIT tokens
+        # Virtual balance is automatically $10,000 due to the formula: 10000 + SUM(positions)
+        # Since new users have no positions, they get exactly $10,000
+        await conn.execute('''
+            UPDATE users 
+            SET inheritance_claimed = TRUE, bait_tokens = bait_tokens + 10
+            WHERE telegram_id = $1
+        ''', user_id)
+        
+        logger.info(f"User {user_id} claimed inheritance: $10,000 virtual balance (automatic) + 10 BAIT tokens")
+        return True
+
+async def check_inheritance_status(user_id: int) -> bool:
+    """Check if user has claimed their inheritance"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow('''
+            SELECT inheritance_claimed FROM users WHERE telegram_id = $1
+        ''', user_id)
+        
+        if not result:
+            return False
+            
+        return result['inheritance_claimed']

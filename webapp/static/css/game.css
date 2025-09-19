@@ -1982,3 +1982,221 @@ body::after {
     transform: translateY(0);
 }
 
+/* ===============================
+   INHERITANCE SCREEN STYLES
+   =============================== */
+
+#inheritance-screen {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d1810 50%, #1a1a1a 100%);
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.letter-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+.letter-envelope {
+    position: relative;
+    max-width: 400px;
+    width: 100%;
+    background: linear-gradient(135deg, #f4f1e8 0%, #e8e0d0 100%);
+    border-radius: 15px;
+    box-shadow: 
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        inset 0 1px 3px rgba(255, 255, 255, 0.3);
+    transform: perspective(1000px) rotateX(2deg);
+    overflow: hidden;
+}
+
+.wax-seal {
+    position: absolute;
+    top: -15px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle, #8B4513 0%, #5D2E0A  100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #FFD700;
+    font-weight: bold;
+    border: 3px solid #654321;
+    box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.4),
+        inset 0 2px 4px rgba(255, 255, 255, 0.2);
+    z-index: 10;
+}
+
+.aged-paper {
+    background: 
+        radial-gradient(circle at 20% 20%, rgba(139, 69, 19, 0.1) 0%, transparent 20%),
+        radial-gradient(circle at 80% 80%, rgba(139, 69, 19, 0.1) 0%, transparent 15%),
+        radial-gradient(circle at 40% 60%, rgba(101, 67, 33, 0.05) 0%, transparent 25%),
+        linear-gradient(135deg, #f9f6f0 0%, #f0e6d6 100%);
+    padding: 30px 25px;
+    border-radius: 12px;
+    border: 2px solid #d4c4a8;
+    position: relative;
+}
+
+.aged-paper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="30" r="1" fill="%23d4c4a8" opacity="0.3"/><circle cx="80" cy="70" r="1.5" fill="%238b4513" opacity="0.2"/><circle cx="60" cy="20" r="0.8" fill="%23a0826d" opacity="0.4"/></svg>') repeat;
+    pointer-events: none;
+    border-radius: 12px;
+}
+
+.letter-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #d4c4a8;
+    padding-bottom: 15px;
+}
+
+.letter-header h2 {
+    color: #5D2E0A;
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    margin: 0;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.letter-content {
+    margin-bottom: 25px;
+    line-height: 1.6;
+}
+
+.letter-text {
+    color: #2c1810;
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    margin-bottom: 15px;
+    text-align: justify;
+}
+
+.letter-signature {
+    text-align: right;
+    color: #5D2E0A;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+.inheritance-items {
+    background: rgba(255, 215, 0, 0.1);
+    border: 2px dashed #D4AF37;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.inheritance-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 8px;
+    border-left: 4px solid #D4AF37;
+}
+
+.inheritance-item:last-child {
+    margin-bottom: 0;
+}
+
+.item-icon {
+    font-size: 20px;
+    margin-right: 12px;
+    width: 30px;
+    text-align: center;
+}
+
+.item-text {
+    color: #2c1810;
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.accept-inheritance-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #2c1810;
+    border: none;
+    border-radius: 12px;
+    padding: 15px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: 'Arial', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.2),
+        inset 0 1px 3px rgba(255, 255, 255, 0.3);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.accept-inheritance-btn:hover {
+    background: linear-gradient(135deg, #FFF700 0%, #FFB500 100%);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 6px 12px rgba(0, 0, 0, 0.3),
+        inset 0 1px 3px rgba(255, 255, 255, 0.4);
+}
+
+.accept-inheritance-btn:active {
+    transform: translateY(0);
+    box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.2),
+        inset 0 1px 3px rgba(255, 255, 255, 0.3);
+}
+
+.accept-inheritance-btn:disabled {
+    background: #cccccc;
+    color: #666666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Responsive adjustments for inheritance screen */
+@media (max-width: 480px) {
+    .letter-envelope {
+        max-width: 350px;
+        margin: 10px;
+    }
+    
+    .aged-paper {
+        padding: 20px 15px;
+    }
+    
+    .letter-header h2 {
+        font-size: 18px;
+    }
+    
+    .letter-text {
+        font-size: 13px;
+    }
+    
+    .wax-seal {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+        top: -12px;
+        right: 20px;
+    }
+}
+
