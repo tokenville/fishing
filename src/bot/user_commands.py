@@ -11,34 +11,17 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, create_user, get_active_position, ensure_user_has_level, 
     give_starter_rod, get_user_rods, get_user_group_ponds, get_user_virtual_balance,
-    get_flexible_leaderboard
+    get_flexible_leaderboard, check_inheritance_status
 )
 from src.bot.animations import safe_reply
 
 logger = logging.getLogger(__name__)
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /start command - show personalized user stats and welcome"""
-    user_id = update.effective_user.id
-    username = update.effective_user.username or update.effective_user.first_name
-    
-    logger.debug(f"START command called by user {user_id} ({username})")
-    
+async def get_full_start_message(user_id: int, username: str) -> str:
+    """Build the complete start message for users who have claimed inheritance"""
     try:
-        # Get or create user
-        user = await get_user(user_id)
-        if not user:
-            await create_user(user_id, username)
-            user = await get_user(user_id)
-            await give_starter_rod(user_id)
-            user = await get_user(user_id)  # Refresh after starter rod
-        else:
-            # Ensure existing user has level and starter rod
-            await ensure_user_has_level(user_id)
-            await give_starter_rod(user_id)
-            user = await get_user(user_id)  # Refresh user data
-        
         # Get user statistics
+        user = await get_user(user_id)
         user_level = user['level'] if user else 1
         bait_tokens = user['bait_tokens'] if user else 10
         experience = user['experience'] if user else 0
@@ -87,6 +70,53 @@ Make leveraged trades and catch fish based on your performance - from trash catc
 🐋 Massive wins = Legends (cosmic whale)
 
 <i>Each cast costs 1 $BAIT token!</i>"""
+        
+        return start_message
+        
+    except Exception as e:
+        logger.error(f"Error building full start message for user {user_id}: {e}")
+        return f"<b>🎣 Welcome to Big Catchy, {username}!</b>\n\nUse /help for game guide."
+
+def get_inheritance_welcome_message(username: str) -> str:
+    """Get welcome message for users who haven't claimed their inheritance yet"""
+    return f"""<b>📜 Welcome, {username}!</b>
+
+You have received a mysterious letter...
+
+🏴‍☠️ <i>From your grandfather, the legendary crypto anarchist</i>
+
+Open the app to learn about your inheritance!"""
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start command - show personalized user stats and welcome"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    
+    logger.debug(f"START command called by user {user_id} ({username})")
+    
+    try:
+        # Get or create user
+        user = await get_user(user_id)
+        if not user:
+            await create_user(user_id, username)
+            user = await get_user(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh after starter rod
+        else:
+            # Ensure existing user has level and starter rod
+            await ensure_user_has_level(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh user data
+        
+        # Check inheritance status to determine which message to show
+        has_claimed_inheritance = await check_inheritance_status(user_id)
+        
+        if has_claimed_inheritance:
+            # Show full game guide for existing players
+            start_message = await get_full_start_message(user_id, username)
+        else:
+            # Show inheritance welcome for new players
+            start_message = get_inheritance_welcome_message(username)
 
         # Create web app button
         webapp_url = os.environ.get('WEBAPP_URL')
@@ -121,8 +151,60 @@ Make leveraged trades and catch fish based on your performance - from trash catc
         await safe_reply(update, "🎣 Welcome! Use /help for guide.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command - show same content as /start"""
-    await start_command(update, context)
+    """Handle /help command - always show full game guide regardless of inheritance status"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    
+    logger.debug(f"HELP command called by user {user_id} ({username})")
+    
+    try:
+        # Get or create user
+        user = await get_user(user_id)
+        if not user:
+            await create_user(user_id, username)
+            user = await get_user(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh after starter rod
+        else:
+            # Ensure existing user has level and starter rod
+            await ensure_user_has_level(user_id)
+            await give_starter_rod(user_id)
+            user = await get_user(user_id)  # Refresh user data
+        
+        # Always show full game guide for help command
+        start_message = await get_full_start_message(user_id, username)
+        
+        # Create web app button
+        webapp_url = os.environ.get('WEBAPP_URL')
+        logger.debug(f"WEBAPP_URL: {webapp_url}")
+        
+        if not webapp_url:
+            logger.error("WEBAPP_URL environment variable not set!")
+            await update.message.reply_text(start_message, parse_mode='HTML')
+            return
+            
+        try:
+            keyboard = [[
+                InlineKeyboardButton(
+                    "🎮 Open Miniapp", 
+                    web_app=WebAppInfo(url=webapp_url)
+                )
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.debug(f"Created keyboard with webapp URL: {webapp_url}")
+        except Exception as e:
+            logger.error(f"Error creating WebApp button: {e}")
+            await update.message.reply_text(start_message, parse_mode='HTML')
+            return
+        
+        logger.debug(f"Sending help message with webapp button to user {user_id}")
+        await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
+        logger.debug(f"Successfully sent help message to user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in help command for user {user_id}: {e}")
+        logger.exception("Full help command error traceback:")
+        await safe_reply(update, "🎣 Welcome! Use /cast to start fishing.")
 
 async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /pnl command - show user's P&L and balance"""
