@@ -159,7 +159,7 @@ async def pond_selection_callback(update: Update, context: ContextTypes.DEFAULT_
                 cast_appendix = get_random_cast_appendix()
                 await context.bot.send_message(
                     chat_id=pond['chat_id'],
-                    text=f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>. {cast_appendix}",
+                    text=f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>.{cast_appendix}",
                     parse_mode='HTML'
                 )
             except Exception as e:

@@ -93,7 +93,7 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
         if pond.get('pond_type') == 'group' and pond.get('chat_id'):
             try:
                 cast_appendix = get_random_cast_appendix()
-                group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>. {cast_appendix}"
+                group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond['name']}</b>.{cast_appendix}"
                 await context.bot.send_message(
                     chat_id=pond['chat_id'],
                     text=group_message,

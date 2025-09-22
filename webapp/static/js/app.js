@@ -902,17 +902,8 @@ function getRarityText(rarity) {
 }
 
 function showError(message) {
-    // В реальном приложении здесь может быть toast или другое уведомление
     console.error(message);
-    
-    if (tg) {
-        tg.showAlert(message);
-    } else if (appConfig.isDevelopment) {
-        // In development, show a nicer error message
-        showMessage(`❌ ${message}`, 3000);
-    } else {
-        alert(message);
-    }
+    showMessage(`❌ ${message}`, 'error', 4000);
 }
 
 // === EVENT LISTENERS ===
@@ -1158,28 +1149,14 @@ async function purchaseProduct(productId) {
 
 // Helper functions for notifications
 function showSuccess(message) {
-    if (tg) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
+    showMessage(message, 'success', 4000);
 }
 
 function showInfo(message) {
-    if (tg) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
+    showMessage(message, 'info', 3000);
 }
 
-function showError(message) {
-    if (tg) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
-}
+// Remove duplicate showError function - use the one already defined above
 
 // === APP INITIALIZATION ===
 async function checkInheritanceStatus() {
