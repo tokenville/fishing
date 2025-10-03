@@ -10,12 +10,15 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, get_active_position, use_bait, create_position_with_gear, close_position,
     ensure_user_has_level, give_starter_rod, get_pond_by_id, get_rod_by_id,
-    get_suitable_fish, check_hook_rate_limit, ensure_user_has_active_rod
+    get_suitable_fish, check_hook_rate_limit, ensure_user_has_active_rod,
+    can_use_free_cast, mark_onboarding_action, can_use_guaranteed_hook, should_get_special_catch,
+    award_first_cast_reward
 )
 from src.utils.crypto_price import get_crypto_price, calculate_pnl, format_time_fishing, get_fishing_time_seconds, get_price_error_message
 from src.bot.message_templates import get_catch_story_from_db, get_quick_fishing_message, format_fishing_complete_caption
 from src.generators.fish_card_generator import generate_fish_card_from_db
 from src.bot.random_messages import get_random_cast_appendix, get_random_hook_appendix
+from src.bot.onboarding_handler import handle_onboarding_command
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +47,21 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
             )
             return
         
-        # Use bait
-        if not await use_bait(user_id):
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="🎣 Failed to use bait. Try again!"
-            )
-            return
+        # Check if user can use free tutorial cast
+        can_use_free = await can_use_free_cast(user_id)
+        
+        # Use bait (skip for free tutorial cast)
+        if can_use_free:
+            # Mark that user used their free cast
+            await mark_onboarding_action(user_id, 'first_cast')
+        else:
+            # Normal bait usage
+            if not await use_bait(user_id):
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎣 Failed to use bait. Try again!"
+                )
+                return
         
         # Get user's active rod
         active_rod = await ensure_user_has_active_rod(user_id)
@@ -78,16 +89,87 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
         # Create position
         await create_position_with_gear(user_id, pond_id, active_rod['id'], current_price)
         
-        # Send success message to private chat
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"🎣 <b>Cast successful!</b>\n\n"
-                 f"🌊 <b>Pond:</b> {pond['name']}\n"
-                 f"🎣 <b>Rod:</b> {active_rod['name']}\n"
-                 f"💰 <b>Entry Price:</b> ${current_price:,.4f}\n\n"
-                 f"<i>Use /hook when you're ready to catch the fish!</i>",
-            parse_mode='HTML'
-        )
+        try:
+            from src.bot.animations import animate_casting_sequence
+
+            class _DummyMessage:
+                def __init__(self, bot, chat_id):
+                    self.bot = bot
+                    self.chat_id = chat_id
+                    self.from_user = type('user', (), {'id': chat_id})
+
+                async def reply_text(self, text, parse_mode=None):
+                    return await self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=text,
+                        parse_mode=parse_mode
+                    )
+
+            dummy_message = _DummyMessage(context.bot, user_id)
+            await animate_casting_sequence(
+                dummy_message,
+                username,
+                user['level'] if user else 1,
+                current_price,
+                pond_id=pond['id'],
+                rod_id=active_rod['id']
+            )
+        except Exception as anim_err:
+            logger.warning(f"Cast animation failed for user {user_id}: {anim_err}")
+
+        # Check if user gets first cast reward (gear unlock)
+        cast_reward_message = await award_first_cast_reward(user_id)
+
+        # Handle onboarding progression if applicable
+        onboarding_result = await handle_onboarding_command(user_id, '/cast')
+        if isinstance(onboarding_result, dict) and onboarding_result.get('send_message'):
+            # In onboarding - show gear claim button if applicable
+            if cast_reward_message:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                # Store reward message for later display
+                context.user_data['pending_gear_reward'] = cast_reward_message
+                # Store onboarding result to show after gear claim
+                context.user_data['pending_onboarding_message'] = onboarding_result['send_message']
+                context.user_data['pending_onboarding_markup'] = onboarding_result.get('reply_markup')
+
+                gear_keyboard = [[InlineKeyboardButton("🎣 Claim gear", callback_data="claim_gear_reward")]]
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎁 <b>New gear unlocked!</b>\n\nClaim your starter rods now.",
+                    reply_markup=InlineKeyboardMarkup(gear_keyboard),
+                    parse_mode='HTML'
+                )
+            else:
+                # No gear reward - show tutorial message directly
+                await asyncio.sleep(3)
+                sent_message = await context.bot.send_message(
+                    chat_id=user_id,
+                    text=onboarding_result['send_message'],
+                    reply_markup=onboarding_result.get('reply_markup'),
+                    parse_mode='HTML'
+                )
+                # Store message ID for later deletion
+                context.user_data['tutorial_message_id'] = sent_message.message_id
+        else:
+            # Not in onboarding - show regular rewards/messages
+            if cast_reward_message:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                # Store reward message for later display
+                context.user_data['pending_gear_reward'] = cast_reward_message
+
+                gear_keyboard = [[InlineKeyboardButton("🎣 Claim gear", callback_data="claim_gear_reward")]]
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎁 <b>New gear unlocked!</b>\n\nClaim your starter rods now.",
+                    reply_markup=InlineKeyboardMarkup(gear_keyboard),
+                    parse_mode='HTML'
+                )
+            elif can_use_free:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="✨ First cast is free. Wait for the right moment and use /hook when ready!",
+                    parse_mode='HTML'
+                )
         
         # Send group notification if pond is a group pond
         if pond.get('pond_type') == 'group' and pond.get('chat_id'):
@@ -97,7 +179,8 @@ async def start_private_fishing_from_group(user_id: int, username: str, pond_id:
                 await context.bot.send_message(
                     chat_id=pond['chat_id'],
                     text=group_message,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    disable_notification=True
                 )
             except Exception as e:
                 logger.warning(f"Could not send group cast notification: {e}")
@@ -198,6 +281,40 @@ async def complete_private_hook_from_group(user_id: int, username: str, context:
             )
             return
         
+        # Check for special catch (like secret letter during onboarding)
+        special_catch_item = await should_get_special_catch(user_id)
+        if special_catch_item:
+            logger.info(f"User {user_id} should get special catch: {special_catch_item}")
+            
+            # Wait for animation to complete
+            await hook_task
+            
+            # Send special catch message instead of fish card
+            special_message = f"📜 <b>You caught a {special_catch_item}!</b>\n\n<i>This is a special catch from your onboarding journey.</i>"
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=special_message,
+                parse_mode='HTML'
+            )
+            
+            # Close position with special catch
+            await close_position(position['id'], current_price, pnl_percent, None)
+            
+            # Handle onboarding progression for special catch
+            await handle_onboarding_command(user_id, '/hook')
+            
+            logger.info(f"User {username} caught special item: {special_catch_item}")
+            return
+        
+        # Check if user should get guaranteed good catch (onboarding)
+        should_guarantee = await can_use_guaranteed_hook(user_id)
+        if should_guarantee:
+            # Override P&L for guaranteed good catch (2-5% positive)
+            import random
+            pnl_percent = random.uniform(2.0, 5.0)
+            await mark_onboarding_action(user_id, 'first_hook')
+            logger.info(f"Guaranteed good catch for user {user_id}: {pnl_percent}%")
+        
         # Normal fishing - proceed with fish selection and generation
         fish_data = await get_suitable_fish(
             pnl_percent, 
@@ -275,7 +392,8 @@ async def complete_private_hook_from_group(user_id: int, username: str, context:
                     await context.bot.send_message(
                         chat_id=pond['chat_id'],
                         text=group_notification,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        disable_notification=True
                     )
                 except Exception as e:
                     logger.warning(f"Could not send group hook notification: {e}")
@@ -287,6 +405,30 @@ async def complete_private_hook_from_group(user_id: int, username: str, context:
                 text=f"🎣 {username} caught something strange! P&L: {pnl_percent:+.1f}%"
             )
             await close_position(position['id'], current_price, pnl_percent, None)
+        
+        # Handle onboarding progression if applicable
+        if fish_data:
+            onboarding_result = await handle_onboarding_command(
+                user_id,
+                '/hook',
+                fish_name=fish_data['name'],
+                pnl=f"{pnl_percent:+.1f}"
+            )
+            if isinstance(onboarding_result, dict) and onboarding_result.get("send_message"):
+                # Wait 4 seconds so user can see the fish card
+                await asyncio.sleep(4)
+                # Show first catch congrats message
+                sent_message = await context.bot.send_message(
+                    chat_id=user_id,
+                    text=onboarding_result["send_message"],
+                    reply_markup=onboarding_result.get("reply_markup"),
+                    parse_mode='HTML'
+                )
+                # Store reward message in context for later display via callback
+                if onboarding_result.get("reward_message"):
+                    context.user_data['pending_reward'] = onboarding_result["reward_message"]
+        else:
+            await handle_onboarding_command(user_id, '/hook')
         
         logger.info(f"User {username} completed hook from group in private chat")
         

@@ -9,7 +9,7 @@ from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
-async def safe_reply(update, text: str, max_retries: int = 3) -> None:
+async def safe_reply(update, text: str, max_retries: int = 3, parse_mode: str = None) -> None:
     """Safely send message with retry logic"""
     logger.debug(f"safe_reply called with update type: {type(update)}, has message: {hasattr(update, 'message') if update else False}")
     
@@ -17,14 +17,23 @@ async def safe_reply(update, text: str, max_retries: int = 3) -> None:
         logger.error("safe_reply called with None update object")
         return
         
-    if not hasattr(update, 'message') or not update.message:
-        logger.error(f"Update object has no message attribute or message is None. Update: {update}")
+    message = getattr(update, 'message', None)
+    if not message and hasattr(update, 'callback_query') and update.callback_query:
+        message = update.callback_query.message
+    if not message and hasattr(update, 'effective_message'):
+        message = update.effective_message
+
+    if not message:
+        logger.error(f"Update object has no message context for safe_reply. Update: {update}")
         return
         
     for attempt in range(max_retries):
         try:
-            logger.debug(f"safe_reply attempt {attempt + 1}: sending message to chat {update.message.chat_id if update.message else 'unknown'}")
-            await update.message.reply_text(text)
+            logger.debug(f"safe_reply attempt {attempt + 1}: sending message to chat {message.chat_id if message else 'unknown'}")
+            if parse_mode:
+                await message.reply_text(text, parse_mode=parse_mode)
+            else:
+                await message.reply_text(text)
             logger.debug(f"safe_reply successful on attempt {attempt + 1}")
             return
         except Exception as e:
@@ -137,17 +146,17 @@ async def animate_casting_sequence(message, username, user_level, entry_price, p
         # Get animated sequence
         animated_sequence = get_cast_animated_sequence()
         
-        # Send initial text message
+        # Send initial text message with HTML parse mode
         initial_message = format_cast_message(header, animated_sequence[0])
-        cast_msg = await message.reply_text(initial_message)
-        
+        cast_msg = await message.reply_text(initial_message, parse_mode='HTML')
+
         # Animate through remaining sequence (only the animated part changes)
         for i, animated_text in enumerate(animated_sequence[1:]):
             delay = 3.0 if i in [0, 3, 5] else 2.5  # Slower for readability
             await asyncio.sleep(delay)
             full_message = format_cast_message(header, animated_text)
             try:
-                await cast_msg.edit_text(full_message)
+                await cast_msg.edit_text(full_message, parse_mode='HTML')
             except Exception as edit_error:
                 if "Message is not modified" in str(edit_error):
                     logger.warning(f"Skipping duplicate message: {animated_text}")

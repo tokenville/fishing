@@ -189,6 +189,7 @@ async def init_database():
                 bait_tokens INTEGER DEFAULT 10,
                 level INTEGER DEFAULT 1,
                 experience INTEGER DEFAULT 0,
+                balance_bonus NUMERIC(18, 2) DEFAULT 0,
                 inheritance_claimed BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -201,6 +202,13 @@ async def init_database():
             ''')
         except Exception:
             # Column already exists, ignore error
+            pass
+
+        try:
+            await conn.execute('''
+                ALTER TABLE users ADD COLUMN balance_bonus NUMERIC(18, 2) DEFAULT 0
+            ''')
+        except Exception:
             pass
         
         # Create ponds table (enhanced for group support)
@@ -385,8 +393,43 @@ async def init_database():
                 completed_at TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (telegram_id),
                 FOREIGN KEY (product_id) REFERENCES products (id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS onboarding_progress (
+                user_id BIGINT PRIMARY KEY REFERENCES users(telegram_id),
+                current_step VARCHAR(50) DEFAULT 'welcome',
+                completed BOOLEAN DEFAULT FALSE,
+                first_cast_used BOOLEAN DEFAULT FALSE,
+                first_hook_used BOOLEAN DEFAULT FALSE,
+                group_bonus_claimed BOOLEAN DEFAULT FALSE,
+                first_cast_reward_claimed BOOLEAN DEFAULT FALSE,
+                first_catch_reward_claimed BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Backfill new onboarding flags for existing installations
+        try:
+            await conn.execute(
+                "ALTER TABLE onboarding_progress ADD COLUMN IF NOT EXISTS group_bonus_claimed BOOLEAN DEFAULT FALSE"
+            )
+        except Exception:
+            pass
+
+        try:
+            await conn.execute(
+                "ALTER TABLE onboarding_progress ADD COLUMN IF NOT EXISTS first_catch_reward_claimed BOOLEAN DEFAULT FALSE"
+            )
+        except Exception:
+            pass
+
+        try:
+            await conn.execute(
+                "ALTER TABLE onboarding_progress ADD COLUMN IF NOT EXISTS first_cast_reward_claimed BOOLEAN DEFAULT FALSE"
+            )
+        except Exception:
+            pass
         
         # Insert default data
         await _insert_default_ponds(conn)
@@ -466,6 +509,7 @@ async def _insert_default_ponds(conn: asyncpg.Connection):
     count = await conn.fetchval('SELECT COUNT(*) FROM ponds')
     if count == 0:
         ponds_data = [
+            ('🌙 Moon River', 'ETH/USDT', 'ETH', 'USDT', None, 0, True),  # Special onboarding pond
             ('🌊 Криптовые Воды', 'ETH/USDT', 'ETH', 'USDT', None, 1, True),
             ('💰 Озеро Профита', 'BTC/USDT', 'BTC', 'USDT', None, 2, True),
             ('⚡ Море Волатильности', 'SOL/USDT', 'SOL', 'USDT', None, 3, True),
@@ -582,41 +626,59 @@ async def get_user_rods(telegram_id: int) -> List[asyncpg.Record]:
             ORDER BY r.leverage
         ''', telegram_id)
 
-async def give_starter_rod(telegram_id: int):
-    """Give both starter rods (Long & Short) to user if they don't have any"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        # Check if user already has rods
-        has_rods = await conn.fetchval(
-            'SELECT COUNT(*) FROM user_rods WHERE user_id = $1', 
-            telegram_id
+async def give_starter_rod(telegram_id: int, conn: Optional[asyncpg.Connection] = None):
+    """Give both starter rods (Long & Short) to user if they don't have any."""
+
+    async def _assign(connection: asyncpg.Connection):
+        has_rods = await connection.fetchval(
+            'SELECT COUNT(*) FROM user_rods WHERE user_id = $1',
+            telegram_id,
         )
-        
-        if not has_rods:
-            # Get both starter rod IDs
-            starter_rods = await conn.fetch(
-                'SELECT id FROM rods WHERE is_starter = true ORDER BY rod_type'
+
+        if has_rods:
+            return
+
+        starter_rods = await connection.fetch(
+            'SELECT id FROM rods WHERE is_starter = true ORDER BY rod_type'
+        )
+
+        for starter_rod in starter_rods:
+            await connection.execute(
+                '''
+                INSERT INTO user_rods (user_id, rod_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, rod_id) DO NOTHING
+                ''',
+                telegram_id,
+                starter_rod['id'],
             )
-            
-            for starter_rod in starter_rods:
-                await conn.execute('''
-                    INSERT INTO user_rods (user_id, rod_id)
-                    VALUES ($1, $2)
-                    ON CONFLICT (user_id, rod_id) DO NOTHING
-                ''', telegram_id, starter_rod['id'])
-            
+
+        if starter_rods:
             print(f"Gave {len(starter_rods)} starter rods to user {telegram_id}")
-            
-            # Set Long rod as default active rod
-            long_rod = await conn.fetchrow(
-                'SELECT id FROM rods WHERE is_starter = true AND rod_type = \'long\' LIMIT 1'
+
+        long_rod = await connection.fetchrow(
+            "SELECT id FROM rods WHERE is_starter = true AND rod_type = 'long' LIMIT 1"
+        )
+        if long_rod:
+            await connection.execute(
+                '''
+                INSERT INTO user_settings (user_id, active_rod_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET active_rod_id = EXCLUDED.active_rod_id
+                ''',
+                telegram_id,
+                long_rod['id'],
             )
-            if long_rod:
-                await conn.execute('''
-                    INSERT INTO user_settings (user_id, active_rod_id)
-                    VALUES ($1, $2)
-                    ON CONFLICT (user_id) DO UPDATE SET active_rod_id = $2
-                ''', telegram_id, long_rod['id'])
+
+        logger.info(f"Assigned starter rods to user {telegram_id}")
+
+    if conn is not None:
+        await _assign(conn)
+        return
+
+    pool = await get_pool()
+    async with pool.acquire() as pooled_conn:
+        await _assign(pooled_conn)
 
 async def ensure_user_has_level(telegram_id: int):
     """Ensure user has level and experience columns set"""
@@ -1050,16 +1112,20 @@ async def get_user_virtual_balance(user_id: int) -> float:
             FROM positions 
             WHERE user_id = $1 AND status = 'closed'
         ''', user_id)
+        bonus = await conn.fetchval(
+            'SELECT balance_bonus FROM users WHERE telegram_id = $1',
+            user_id
+        ) or 0
         
         if result:
             return {
-                'balance': float(result['balance']),
+                'balance': float(result['balance']) + float(bonus),
                 'total_trades': result['total_trades'] or 0,
                 'winning_trades': result['winning_trades'] or 0,
                 'avg_pnl': float(result['avg_pnl']) if result['avg_pnl'] else 0
             }
         return {
-            'balance': 10000.0,
+            'balance': 10000.0 + float(bonus),
             'total_trades': 0,
             'winning_trades': 0,
             'avg_pnl': 0
@@ -1124,16 +1190,22 @@ async def get_flexible_leaderboard(
                     u.telegram_id,
                     u.username,
                     u.level,
-                    10000 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0) as balance,
+                    10000
+                    + COALESCE(SUM(1000 * p.pnl_percent / 100), 0)
+                    + COALESCE(u.balance_bonus, 0) as balance,
                     COUNT(p.id) as total_trades,
                     AVG(p.pnl_percent) as avg_pnl,
                     MAX(p.pnl_percent) as best_trade,
                     MIN(p.pnl_percent) as worst_trade,
                     MAX(p.exit_time) as last_trade_time,
-                    RANK() OVER (ORDER BY 10000 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0) DESC) as rank
+                    RANK() OVER (
+                        ORDER BY 10000
+                                 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0)
+                                 + COALESCE(u.balance_bonus, 0) DESC
+                    ) as rank
                 FROM users u
                 LEFT JOIN positions p ON u.telegram_id = p.user_id AND {where_clause}
-                GROUP BY u.telegram_id, u.username, u.level
+                GROUP BY u.telegram_id, u.username, u.level, u.balance_bonus
                 HAVING COUNT(p.id) > 0  -- Only active players
             ),
             stats AS (
@@ -1543,3 +1615,213 @@ async def check_inheritance_status(user_id: int) -> bool:
             return False
             
         return result['inheritance_claimed']
+
+# Onboarding system functions
+async def get_onboarding_progress(user_id: int) -> Optional[asyncpg.Record]:
+    """Get user's onboarding progress"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow('''
+            SELECT * FROM onboarding_progress WHERE user_id = $1
+        ''', user_id)
+
+async def create_onboarding_progress(user_id: int, step: str = 'intro'):
+    """Create initial onboarding progress for new user"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO onboarding_progress (
+                user_id,
+                current_step,
+                completed,
+                first_cast_used,
+                first_hook_used,
+                group_bonus_claimed,
+                first_catch_reward_claimed
+            )
+            VALUES ($1, $2, FALSE, FALSE, FALSE, FALSE, FALSE)
+            ON CONFLICT (user_id) DO NOTHING
+        ''', user_id, step)
+        logger.info(f"Created onboarding progress for user {user_id} at step {step}")
+
+async def update_onboarding_step(user_id: int, step: str):
+    """Update user's current onboarding step"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE onboarding_progress 
+            SET current_step = $2, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1
+        ''', user_id, step)
+        logger.info(f"Updated onboarding step for user {user_id} to {step}")
+
+async def mark_onboarding_action(user_id: int, action: str):
+    """Mark specific onboarding action as completed (first_cast_used, first_hook_used)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if action == 'first_cast':
+            await conn.execute('''
+                UPDATE onboarding_progress 
+                SET first_cast_used = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+            ''', user_id)
+        elif action == 'first_hook':
+            await conn.execute('''
+                UPDATE onboarding_progress 
+                SET first_hook_used = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+            ''', user_id)
+        logger.info(f"Marked onboarding action {action} for user {user_id}")
+
+async def award_group_bonus(user_id: int, bait_reward: int = 10) -> str:
+    """Grant BAIT bonus for joining the primary group if not yet claimed."""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        await create_onboarding_progress(user_id)
+        progress = await get_onboarding_progress(user_id)
+
+    progress_map = dict(progress) if progress else {}
+
+    if progress_map.get('group_bonus_claimed'):
+        logger.info("Group bonus already claimed by user %s", user_id)
+        return "You already claimed this bonus."
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                '''
+                UPDATE onboarding_progress
+                SET group_bonus_claimed = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+                ''',
+                user_id,
+            )
+            await conn.execute(
+                '''
+                UPDATE users
+                SET bait_tokens = bait_tokens + $1
+                WHERE telegram_id = $2
+                ''',
+                bait_reward,
+                user_id,
+            )
+
+    logger.info("Granted %s BAIT group bonus to user %s", bait_reward, user_id)
+    return f"🪱 +{bait_reward} BAIT for connecting a new pond!"
+
+async def award_first_catch_reward(user_id: int, balance_reward: int = 1000) -> str:
+    """Grant first-catch reward by crediting virtual balance if not yet claimed."""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        await create_onboarding_progress(user_id)
+        progress = await get_onboarding_progress(user_id)
+
+    progress_map = dict(progress) if progress else {}
+
+    if progress_map.get('first_catch_reward_claimed'):
+        logger.info("First catch reward already claimed by user %s", user_id)
+        return "🏆 First catch reward already claimed."
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                '''
+                UPDATE onboarding_progress
+                SET first_catch_reward_claimed = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+                ''',
+                user_id,
+            )
+            await conn.execute(
+                '''
+                UPDATE users
+                SET balance_bonus = COALESCE(balance_bonus, 0) + $1
+                WHERE telegram_id = $2
+                ''',
+                balance_reward,
+                user_id,
+            )
+
+    logger.info(
+        "Granted %s balance bonus first-catch reward to user %s",
+        balance_reward,
+        user_id,
+    )
+    return (
+        f"🏆 +${balance_reward} virtual balance for your first catch!\n"
+        "🐟 Keep fishing — rare fish bring even more rewards."
+    )
+
+
+async def award_first_cast_reward(user_id: int) -> Optional[str]:
+    """Grant rod reward for the first cast if not yet claimed."""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        await create_onboarding_progress(user_id)
+        progress = await get_onboarding_progress(user_id)
+
+    progress_map = dict(progress) if progress else {}
+
+    if progress_map.get('first_cast_reward_claimed'):
+        return None
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                '''
+                UPDATE onboarding_progress
+                SET first_cast_reward_claimed = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1
+                ''',
+                user_id,
+            )
+            await give_starter_rod(user_id, conn)
+
+    logger.info("Granted starter rods to user %s after first cast", user_id)
+    return (
+        "🎣 New gear unlocked!\n\n"
+        "You got Long & Short rods with different leverage. Pick one before casting — more advanced models dropping soon."
+    )
+
+async def complete_onboarding(user_id: int):
+    """Mark onboarding as completed for user"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE onboarding_progress 
+            SET completed = TRUE, current_step = 'completed', updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1
+        ''', user_id)
+        logger.info(f"Completed onboarding for user {user_id}")
+
+async def is_onboarding_completed(user_id: int) -> bool:
+    """Check if user has completed onboarding"""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        return False
+    return progress['completed']
+
+async def can_use_free_cast(user_id: int) -> bool:
+    """Check if user can use their free tutorial cast"""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        return False
+    return not progress['first_cast_used'] and not progress['completed']
+
+async def can_use_guaranteed_hook(user_id: int) -> bool:
+    """Check if user should get guaranteed good catch on hook"""
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        return False
+    return not progress['first_hook_used'] and not progress['completed']
+
+async def should_get_special_catch(user_id: int) -> Optional[str]:
+    """Check if user should get special catch item (like secret letter)"""
+    progress = await get_onboarding_progress(user_id)
+    if not progress or progress['completed']:
+        return None
+    
+    return None

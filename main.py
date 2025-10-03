@@ -12,11 +12,32 @@ from telegram.ext import ContextTypes
 
 from src.database.db_manager import init_database, close_pool, reset_database
 from src.bot.command_handlers import (
-    cast, hook, status, test_card, help_command, start_command, leaderboard, pnl, 
-    pond_selection_callback, gofishing, join_fishing_callback,
-    handle_pre_checkout_query, handle_successful_payment, buy_bait_command, 
-    buy_bait_callback, transactions_command
+    cast,
+    hook,
+    status,
+    test_card,
+    help_command,
+    start_command,
+    leaderboard,
+    pnl,
+    pond_selection_callback,
+    gofishing,
+    join_fishing_callback,
+    onboarding_start_callback,
+    onboarding_skip_callback,
+    onboarding_claim_bonus_callback,
+    claim_gear_reward_callback,
+    onboarding_claim_reward_callback,
+    onboarding_continue_cast_callback,
+    onboarding_send_cast_callback,
+    onboarding_send_hook_callback,
+    handle_pre_checkout_query,
+    handle_successful_payment,
+    buy_bait_command,
+    buy_bait_callback,
+    transactions_command,
 )
+from src.bot.user_commands import skip_onboarding_command
 from src.bot.group_handlers import my_chat_member_handler, chat_member_handler
 from src.webapp.web_server import start_web_server
 
@@ -107,6 +128,7 @@ def create_application():
     application.add_handler(CommandHandler("gofishing", gofishing))
     application.add_handler(CommandHandler("buy", buy_bait_command))
     application.add_handler(CommandHandler("transactions", transactions_command))
+    application.add_handler(CommandHandler("skip", skip_onboarding_command))
     
     # Add payment handlers
     application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
@@ -123,6 +145,16 @@ def create_application():
     application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
     application.add_handler(CallbackQueryHandler(join_fishing_callback, pattern=r"^join_fishing_"))
     application.add_handler(CallbackQueryHandler(buy_bait_callback, pattern=r"^buy_bait_"))
+    
+    # Add onboarding callback handlers
+    application.add_handler(CallbackQueryHandler(onboarding_start_callback, pattern=r"^ob_start$"))
+    application.add_handler(CallbackQueryHandler(onboarding_skip_callback, pattern=r"^ob_skip$"))
+    application.add_handler(CallbackQueryHandler(onboarding_claim_bonus_callback, pattern=r"^ob_claim_bonus$"))
+    application.add_handler(CallbackQueryHandler(claim_gear_reward_callback, pattern=r"^claim_gear_reward$"))
+    application.add_handler(CallbackQueryHandler(onboarding_claim_reward_callback, pattern=r"^ob_claim_reward$"))
+    application.add_handler(CallbackQueryHandler(onboarding_continue_cast_callback, pattern=r"^ob_continue_cast$"))
+    application.add_handler(CallbackQueryHandler(onboarding_send_cast_callback, pattern=r"^ob_send_cast$"))
+    application.add_handler(CallbackQueryHandler(onboarding_send_hook_callback, pattern=r"^ob_send_hook$"))
     
     return application
 

@@ -11,9 +11,13 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, create_user, get_active_position, ensure_user_has_level, 
     give_starter_rod, get_user_rods, get_user_group_ponds, get_user_virtual_balance,
-    get_flexible_leaderboard, check_inheritance_status
+    get_flexible_leaderboard, check_inheritance_status, is_onboarding_completed
 )
 from src.bot.animations import safe_reply
+from src.bot.onboarding_handler import (
+    get_current_onboarding_step, send_onboarding_message, should_show_mini_app_button,
+    skip_onboarding
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +92,7 @@ You have received a mysterious letter...
 Open the app to learn about your inheritance!"""
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /start command - show personalized user stats and welcome"""
+    """Handle /start command - show onboarding for new users, full guide for completed users"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     
@@ -108,22 +112,32 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await give_starter_rod(user_id)
             user = await get_user(user_id)  # Refresh user data
         
-        # Check inheritance status to determine which message to show
-        has_claimed_inheritance = await check_inheritance_status(user_id)
+        # Check if user has completed onboarding
+        onboarding_completed = await is_onboarding_completed(user_id)
+        logger.debug(f"User {user_id} onboarding completed: {onboarding_completed}")
         
-        if has_claimed_inheritance:
-            # Show full game guide for existing players
+        if onboarding_completed:
+            # Show full game guide for users who completed onboarding
             start_message = await get_full_start_message(user_id, username)
         else:
-            # Show inheritance welcome for new players
-            start_message = get_inheritance_welcome_message(username)
+            # Handle onboarding flow for new users
+            logger.info(f"Starting onboarding flow for user {user_id}")
+            try:
+                current_step = await get_current_onboarding_step(user_id)
+                logger.debug(f"Current onboarding step for user {user_id}: {current_step}")
+                await send_onboarding_message(update, context, user_id, current_step)
+                return  # Exit early since onboarding handler sent the message
+            except Exception as onboarding_error:
+                logger.error(f"Onboarding error for user {user_id}: {onboarding_error}")
+                logger.exception("Full onboarding error traceback:")
+                # Fallback to regular start message
+                start_message = await get_full_start_message(user_id, username)
 
-        # Create web app button
+        # Create web app button only if user should see it
         webapp_url = os.environ.get('WEBAPP_URL')
-        logger.debug(f"WEBAPP_URL: {webapp_url}")
+        show_mini_app = await should_show_mini_app_button(user_id)
         
-        if not webapp_url:
-            logger.error("WEBAPP_URL environment variable not set!")
+        if not webapp_url or not show_mini_app:
             await update.message.reply_text(start_message, parse_mode='HTML')
             return
             
@@ -254,3 +268,36 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error in pnl command: {e}")
         await safe_reply(update, "🎣 Error loading P&L. Try later.")
+
+async def skip_onboarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /skip command - skip onboarding tutorial"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    
+    logger.debug(f"SKIP command called by user {user_id} ({username})")
+    
+    try:
+        # Check if user is in onboarding
+        onboarding_completed = await is_onboarding_completed(user_id)
+        
+        if onboarding_completed:
+            await safe_reply(update, "🎣 You've already completed or skipped the tutorial! Use /help for the full guide.")
+            return
+        
+        # Skip onboarding and show completion payload
+        await skip_onboarding(user_id)
+
+        from src.bot.onboarding_handler import onboarding_handler
+
+        completion_text, completion_markup = await onboarding_handler.build_completion_message(user_id)
+
+        await update.message.reply_text(
+            completion_text,
+            reply_markup=completion_markup,
+            parse_mode='HTML'
+        )
+        logger.info("User %s (%s) skipped onboarding", user_id, username)
+        
+    except Exception as e:
+        logger.error(f"Error in skip command for user {user_id}: {e}")
+        await safe_reply(update, "🎣 Error skipping tutorial. Try again.")
