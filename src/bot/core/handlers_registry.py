@@ -24,7 +24,8 @@ def register_all_handlers(application: Application) -> None:
         my_chat_member_handler, chat_member_handler,
         gofishing, join_fishing_callback
     )
-    from src.bot.features.fishing_flow import pond_selection_callback
+    from src.bot.commands.cast import pond_selection_callback
+    from src.bot.features.share_handlers import share_cast_callback, share_hook_callback
     from src.bot.features.onboarding import (
         onboarding_start_callback, onboarding_skip_callback, onboarding_claim_bonus_callback,
         claim_gear_reward_callback, onboarding_claim_reward_callback, onboarding_continue_cast_callback,
@@ -61,6 +62,8 @@ def register_all_handlers(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
     application.add_handler(CallbackQueryHandler(join_fishing_callback, pattern=r"^join_fishing_"))
     application.add_handler(CallbackQueryHandler(buy_bait_callback, pattern=r"^buy_bait_"))
+    application.add_handler(CallbackQueryHandler(share_cast_callback, pattern=r"^share_cast$"))
+    application.add_handler(CallbackQueryHandler(share_hook_callback, pattern=r"^share_hook$"))
 
     # Onboarding callback handlers
     application.add_handler(CallbackQueryHandler(onboarding_start_callback, pattern=r"^ob_start$"))

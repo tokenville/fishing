@@ -65,8 +65,7 @@ src/
 │   │
 │   ├── features/                 # Feature modules
 │   │   ├── onboarding.py         # Onboarding system + callbacks
-│   │   ├── group_management.py   # Group pond management + gofishing
-│   │   └── fishing_flow.py       # Reusable fishing logic (private chat flows)
+│   │   └── group_management.py   # Group pond management + gofishing
 │   │
 │   └── random_messages.py        # Random flavor text helpers
 │
@@ -137,7 +136,7 @@ main → core/handlers_registry → commands/features
 **Features (Complex Modules):**
 - `src/bot/features/onboarding.py` - Tutorial flow + all onboarding callbacks
 - `src/bot/features/group_management.py` - Group pond creation, /gofishing, member tracking
-- `src/bot/features/fishing_flow.py` - Private chat fishing helpers, pond selection callback
+- `/cast` now содержит `pond_selection_callback` и приватный запуск ловли (см. `src/bot/commands/cast.py`)
 
 **UI Layer:**
 - `src/bot/ui/animations.py` - Cast/hook animation sequences

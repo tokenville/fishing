@@ -27,8 +27,7 @@ src/bot/
 │
 ├── features/                  # Feature modules
 │   ├── onboarding.py         # Onboarding system + callbacks
-│   ├── group_management.py   # Group pond management + gofishing
-│   └── fishing_flow.py       # Reusable fishing logic
+│   └── group_management.py   # Group pond management + gofishing
 │
 └── random_messages.py         # Random flavor text helpers
 ```
@@ -70,5 +69,5 @@ Done!
 
 **features/** - Complex feature modules
 - Multi-step flows (onboarding)
-- Domain logic (group management, fishing flows)
+- Domain logic (group management)
 - Callback handlers related to features

@@ -22,7 +22,6 @@ from src.bot.ui.messages import get_catch_story_from_db, get_quick_fishing_messa
 from src.bot.utils.telegram_utils import safe_reply
 from src.bot.ui.animations import animate_hook_sequence, send_fish_card_or_fallback
 from src.generators.fish_card_generator import generate_fish_card_from_db
-from src.bot.random_messages import get_random_hook_appendix
 from src.bot.features.onboarding import handle_onboarding_command
 
 logger = logging.getLogger(__name__)
@@ -38,32 +37,13 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug(f"HOOK command called by user {user_id} ({username})")
 
     try:
-        # GROUP CHAT LOGIC: Auto-redirect to private chat hook
         if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
-            # Check if user exists and is fishing
-            position = await get_active_position(user_id)
-
-            if not position:
-                # User is not fishing - just ignore the command silently
-                return
-
-            # User is fishing - continue hook process in private chat
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"🎣 <b>Pulling in your catch...</b>\n\n"
-                         f"<i>Hook animation starting!</i>"
-                )
-
-                # Continue with hook logic but send to private chat
-                from src.bot.features.fishing_flow import complete_private_hook_from_group
-                await complete_private_hook_from_group(user_id, username, context)
-                return
-
-            except Exception as e:
-                logger.warning(f"Could not complete private hook for user {user_id}: {e}")
-                # Silently fail - don't spam group
-                return
+            await safe_reply(
+                update,
+                f"🎣 <b>Hook доступен только в личке!</b>\n\n"
+                f"Используй /hook @{context.bot.username} в приватном чате, чтобы завершить ловлю."
+            )
+            return
 
         # Check general rate limit
         if not await check_rate_limit(user_id):
@@ -239,22 +219,26 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 complete_story
             )
 
-            # Send group notification if this was a group pond
+            # Add share button if this is a group pond and we're in private chat
             if pond and pond.get('pond_type') == 'group' and pond.get('chat_id') and update.effective_chat.type == Chat.PRIVATE:
-                try:
-                    # Send notification to the group
-                    pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
-                    hook_appendix = get_random_hook_appendix()
-                    group_notification = f"🎣 <b>{username}</b> caught {fish_data['emoji']} {fish_data['name']} from <b>{pond['name']}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%{hook_appendix}"
-
-                    await context.bot.send_message(
-                        chat_id=pond['chat_id'],
-                        text=group_notification,
-                        parse_mode='HTML',
-                        disable_notification=True
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not send group hook notification: {e}")
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                # Store hook data for sharing
+                context.user_data['share_hook_data'] = {
+                    'fish_name': fish_data['name'],
+                    'fish_emoji': fish_data['emoji'],
+                    'pond_name': pond['name'],
+                    'pond_chat_id': pond['chat_id'],
+                    'pnl_percent': pnl_percent,
+                    'username': username,
+                    'card_image_bytes': card_image
+                }
+                share_button = [[InlineKeyboardButton("📢 Share in group", callback_data="share_hook")]]
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"🎣 <b>Great catch!</b> Want to share it with the group?",
+                    reply_markup=InlineKeyboardMarkup(share_button),
+                    parse_mode='HTML'
+                )
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete

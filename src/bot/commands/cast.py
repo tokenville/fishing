@@ -2,6 +2,7 @@
 /cast command - Start fishing operation
 """
 
+import asyncio
 import logging
 from typing import Optional
 from urllib.parse import urlparse
@@ -12,11 +13,14 @@ from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
     get_user, create_user, get_active_position, ensure_user_has_level, give_starter_rod,
-    get_user_group_ponds, get_group_pond_by_chat_id, add_user_to_group,
-    check_rate_limit, can_use_free_cast, is_onboarding_completed
+    get_user_group_ponds, get_group_pond_by_chat_id,
+    check_rate_limit, can_use_free_cast, is_onboarding_completed,
+    ensure_user_has_active_rod, use_bait, create_position_with_gear, get_pond_by_id,
+    mark_onboarding_action, award_first_cast_reward
 )
 from src.bot.utils.telegram_utils import safe_reply
-from src.bot.features.onboarding import onboarding_handler
+from src.bot.features.onboarding import onboarding_handler, handle_onboarding_command
+from src.utils.crypto_price import get_crypto_price
 
 logger = logging.getLogger(__name__)
 
@@ -80,55 +84,18 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     username = update.effective_user.username or update.effective_user.first_name
     chat = update.effective_chat
     message = update.effective_message
-    if not message and getattr(update, "callback_query", None):
-        message = update.callback_query.message
+
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        await safe_reply(
+            update,
+            f"🎣 <b>Cast работает только в личке!</b>\n\n"
+            f"Напиши /cast @{context.bot.username} в приватном чате, чтобы продолжить."
+        )
+        return
 
     logger.debug(f"CAST command called by user {user_id} ({username}) in chat {chat.id if chat else 'unknown'}")
 
     try:
-        # GROUP CHAT LOGIC: Auto-redirect to private chat fishing
-        if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
-            # Check if user exists in database (has started bot)
-            user = await get_user(user_id)
-            if not user:
-                # User hasn't started bot yet - send instruction message
-                await safe_reply(update,
-                    f"🎣 <b>Start the bot first!</b>\n\n"
-                    f"Go to private chat with @{context.bot.username} and press /start\n\n"
-                    f"<i>After that, you can fish from any group pond!</i>"
-                )
-                return
-
-            # Add user to group membership
-            await add_user_to_group(user_id, chat.id)
-
-            # Get group pond
-            group_pond = await get_group_pond_by_chat_id(chat.id)
-            if not group_pond:
-                await safe_reply(update, "❌ This group doesn't have a pond yet! The bot needs to be properly added to the group.")
-                return
-
-            # Start fishing in private chat directly
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"🎣 <b>Starting fishing from {group_pond['name']}!</b>\n\n"
-                         f"<i>Casting your line now...</i>"
-                )
-
-                # Continue with private fishing logic but send to private chat
-                from src.bot.features.fishing_flow import start_private_fishing_from_group
-                await start_private_fishing_from_group(user_id, username, group_pond['id'], context)
-                return
-
-            except Exception as e:
-                logger.warning(f"Could not start private fishing for user {user_id}: {e}")
-                await safe_reply(update,
-                    f"🎣 <b>Go to private chat to fish!</b>\n\n"
-                    f"Start chat with @{context.bot.username} and use /cast there."
-                )
-                return
-
         # Check rate limit
         if not await check_rate_limit(user_id):
             await safe_reply(update, "⏳ Too many requests! Wait a bit before the next command.")
@@ -170,11 +137,9 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if not onboarding_completed:
                 logger.info("User %s onboarding cast requested — resolving tutorial pond", user_id)
                 try:
-                    from src.bot.features.fishing_flow import start_private_fishing_from_group
-
                     onboarding_pond_id = await _resolve_onboarding_pond_id(context)
                     if onboarding_pond_id:
-                        await start_private_fishing_from_group(
+                        await _start_cast_for_pond(
                             user_id,
                             username,
                             onboarding_pond_id,
@@ -255,3 +220,216 @@ You have access to {len(user_group_ponds)} pond(s) from your group memberships.
         logger.error(f"Error in cast command for user {user_id}: {e}")
         logger.exception("Full cast command error traceback:")
         await safe_reply(update, "🎣 Something went wrong! Try again.")
+
+
+async def _start_cast_for_pond(
+    user_id: int,
+    username: str,
+    pond_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Run the full cast sequence for a selected pond in private chat."""
+
+    try:
+        # Ensure user has level and starter rod
+        await ensure_user_has_level(user_id)
+        await give_starter_rod(user_id)
+        user = await get_user(user_id)
+
+        # Check if user has enough BAIT
+        if user['bait_tokens'] <= 0:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 No $BAIT tokens! Use /buy command to purchase more 🪱"
+            )
+            return
+
+        # Check if user is already fishing
+        active_position = await get_active_position(user_id)
+        if active_position:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress."
+            )
+            return
+
+        # Check if user can use free tutorial cast
+        can_use_free = await can_use_free_cast(user_id)
+
+        # Use bait (skip for free tutorial cast)
+        if can_use_free:
+            # Mark that user used their free cast
+            await mark_onboarding_action(user_id, 'first_cast')
+        else:
+            if not await use_bait(user_id):
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎣 Failed to use bait. Try again!"
+                )
+                return
+
+        # Get user's active rod
+        active_rod = await ensure_user_has_active_rod(user_id)
+
+        if not active_rod:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Failed to find active fishing rod! Try again."
+            )
+            return
+
+        # Get pond info
+        pond = await get_pond_by_id(pond_id)
+        if not pond:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 Pond not found! Try again."
+            )
+            return
+
+        # Get current price and create position
+        base_currency = pond['base_currency']
+        current_price = await get_crypto_price(base_currency)
+
+        # Create position
+        await create_position_with_gear(user_id, pond_id, active_rod['id'], current_price)
+
+        # Trigger casting animation in private chat
+        cast_msg = None
+        try:
+            from src.bot.ui.animations import animate_casting_sequence
+
+            class _DummyMessage:
+                def __init__(self, bot, chat_id):
+                    self.bot = bot
+                    self.chat_id = chat_id
+                    self.from_user = type('user', (), {'id': chat_id})
+
+                async def reply_text(self, text, parse_mode=None):
+                    return await self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=text,
+                        parse_mode=parse_mode
+                    )
+
+            dummy_message = _DummyMessage(context.bot, user_id)
+            user_level = user['level'] if user else 1
+            cast_msg, _, _ = await animate_casting_sequence(
+                dummy_message,
+                username,
+                user_level,
+                current_price,
+                pond_id=pond['id'],
+                rod_id=active_rod['id']
+            )
+        except Exception as anim_err:
+            logger.warning(f"Cast animation failed for user {user_id}: {anim_err}")
+            cast_msg = None
+
+        # Check if user gets first cast reward (gear unlock)
+        cast_reward_message = await award_first_cast_reward(user_id)
+
+        # Handle onboarding progression if applicable
+        onboarding_result = await handle_onboarding_command(user_id, '/cast')
+        if isinstance(onboarding_result, dict) and onboarding_result.get('send_message'):
+            # In onboarding - show gear claim button if applicable
+            if cast_reward_message:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                context.user_data['pending_gear_reward'] = cast_reward_message
+                context.user_data['pending_onboarding_message'] = onboarding_result['send_message']
+                context.user_data['pending_onboarding_markup'] = onboarding_result.get('reply_markup')
+
+                gear_keyboard = [[InlineKeyboardButton("🎣 Claim gear", callback_data="claim_gear_reward")]]
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎁 <b>New gear unlocked!</b>\n\nClaim your starter rods now.",
+                    reply_markup=InlineKeyboardMarkup(gear_keyboard),
+                    parse_mode='HTML'
+                )
+            else:
+                await asyncio.sleep(3)
+                sent_message = await context.bot.send_message(
+                    chat_id=user_id,
+                    text=onboarding_result['send_message'],
+                    reply_markup=onboarding_result.get('reply_markup'),
+                    parse_mode='HTML'
+                )
+                context.user_data['tutorial_message_id'] = sent_message.message_id
+        else:
+            if cast_reward_message:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                context.user_data['pending_gear_reward'] = cast_reward_message
+
+                gear_keyboard = [[InlineKeyboardButton("🎣 Claim gear", callback_data="claim_gear_reward")]]
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🎁 <b>New gear unlocked!</b>\n\nClaim your starter rods now.",
+                    reply_markup=InlineKeyboardMarkup(gear_keyboard),
+                    parse_mode='HTML'
+                )
+            elif can_use_free:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="✨ First cast is free. Wait for the right moment and use /hook when ready!",
+                    parse_mode='HTML'
+                )
+
+        # Share prompt for group ponds (same UX as hook command)
+        if pond.get('pond_type') == 'group' and pond.get('chat_id'):
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+            context.user_data['share_cast_data'] = {
+                'pond_name': pond['name'],
+                'pond_chat_id': pond['chat_id'],
+                'username': username
+            }
+
+            share_button = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("📢 Share in group", callback_data="share_cast")]]
+            )
+
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎣 <b>Cast complete!</b> Want to share it with the group?",
+                reply_markup=share_button,
+                parse_mode='HTML'
+            )
+
+        logger.info(f"User {username} started fishing in pond {pond_id}")
+
+    except Exception as e:
+        logger.error(f"Error in _start_cast_for_pond for user {user_id}: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎣 Something went wrong! Try /cast again."
+        )
+
+
+async def pond_selection_callback(update, context):
+    """Handle pond selection callback from private chat"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        if not query.data.startswith("select_pond_"):
+            return
+
+        pond_id = int(query.data.split("_")[-1])
+        user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name
+
+        # Remove pond selection keyboard to avoid lingering buttons
+        try:
+            await query.delete_message()
+        except Exception:
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+
+        await _start_cast_for_pond(user_id, username, pond_id, context)
+
+    except Exception as e:
+        logger.error(f"Error in pond selection callback: {e}")
+        if update.callback_query:
+            await update.callback_query.edit_message_text("🎣 Error selecting pond! Try again.")

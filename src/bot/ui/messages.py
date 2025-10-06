@@ -92,18 +92,6 @@ def get_quick_fishing_message(fishing_time_seconds):
 
     return random.choice(messages)
 
-
-def get_inheritance_welcome_message(username: str) -> str:
-    """Get welcome message for users who haven't claimed their inheritance yet"""
-    return f"""<b>📜 Welcome, {username}!</b>
-
-You have received a mysterious letter...
-
-🏴‍☠️ <i>From your grandfather, the legendary crypto anarchist</i>
-
-Open the app to learn about your inheritance!"""
-
-
 async def get_help_text():
     """Get dynamic help command text from database"""
     from src.database.db_manager import get_pool
