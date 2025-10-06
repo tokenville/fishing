@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_flexible_leaderboard, get_group_pond_by_chat_id, get_suitable_fish
 )
-from src.bot.animations import safe_reply
+from src.bot.utils.telegram_utils import safe_reply
 from src.generators.fish_card_generator import generate_fish_card_from_db
 
 logger = logging.getLogger(__name__)

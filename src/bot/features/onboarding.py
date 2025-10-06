@@ -328,3 +328,271 @@ async def skip_onboarding(user_id: int) -> None:
 def reload_onboarding_scenario() -> None:
     """Backward compatibility hook for legacy tooling."""
     logger.info("reload_onboarding_scenario() called — state-based onboarding is in-memory and needs no reload")
+
+
+# ===== ONBOARDING CALLBACK HANDLERS =====
+
+async def onboarding_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start the streamlined onboarding flow."""
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        current_step = await onboarding_handler.get_user_current_step(user_id)
+        if current_step == onboarding_handler.STEP_COMPLETED:
+            await query.answer("Tutorial already completed.", show_alert=True)
+            return
+
+        # Delete the intro message
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete intro message: {del_err}")
+
+        await onboarding_handler.advance_step(user_id, onboarding_handler.STEP_JOIN_GROUP)
+        await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_JOIN_GROUP)
+        logger.info("User %s started onboarding", user_id)
+    except Exception as exc:
+        logger.error("Error in onboarding_start_callback: %s", exc)
+        await query.answer("❌ Failed to start tutorial. Try again.", show_alert=True)
+
+
+async def onboarding_skip_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Skip onboarding and jump straight to completion."""
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        current_step = await onboarding_handler.get_user_current_step(user_id)
+        if current_step == onboarding_handler.STEP_COMPLETED:
+            await query.answer("Tutorial already completed.", show_alert=True)
+            return
+
+        # Delete the intro message
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete intro message: {del_err}")
+
+        await skip_onboarding(user_id)
+        await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_COMPLETED)
+        logger.info("User %s skipped onboarding via button", user_id)
+    except Exception as exc:
+        logger.error("Error in onboarding_skip_callback: %s", exc)
+        await query.answer("❌ Failed to skip tutorial. Try again.", show_alert=True)
+
+
+async def onboarding_claim_bonus_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Grant BAIT bonus for joining the primary group and continue to next step."""
+    from src.database.db_manager import add_user_to_group, get_group_pond_by_chat_id
+
+    query = update.callback_query
+    try:
+        user_id = update.effective_user.id
+        current_step = await onboarding_handler.get_user_current_step(user_id)
+        if current_step not in (
+            onboarding_handler.STEP_JOIN_GROUP,
+            onboarding_handler.STEP_CAST,
+        ):
+            await query.answer("This reward is not available right now.", show_alert=True)
+            return
+        reward_message = await award_group_bonus(user_id)
+
+        # Show alert first
+        await query.answer(reward_message, show_alert=True)
+
+        # Delete the join group message after alert is shown
+        # (user will see deletion after closing alert)
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete join group message: {del_err}")
+
+        primary_chat_id = getattr(onboarding_handler, 'group_chat_id', None)
+        if primary_chat_id:
+            try:
+                await add_user_to_group(user_id, primary_chat_id)
+                primary_pond = await get_group_pond_by_chat_id(primary_chat_id)
+                if primary_pond:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"🌊 <b>{primary_pond['name']}</b> added to your ponds!\n"
+                            "You can now select it when casting."
+                        ),
+                        parse_mode='HTML'
+                    )
+            except Exception as add_err:
+                logger.warning("Failed to register onboarding group for user %s: %s", user_id, add_err)
+
+        await onboarding_handler.advance_step(user_id, onboarding_handler.STEP_CAST)
+        await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_CAST)
+    except Exception as exc:
+        logger.error("Error in onboarding_claim_bonus_callback: %s", exc)
+        await query.answer("❌ Failed to grant bonus. Try again later.", show_alert=True)
+
+
+async def claim_gear_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the gear reward in alert modal and then show next onboarding step."""
+    import asyncio
+
+    query = update.callback_query
+    try:
+        user_id = update.effective_user.id
+
+        # Get pending gear reward from context
+        gear_reward_message = context.user_data.get('pending_gear_reward')
+
+        if gear_reward_message:
+            # Show reward in alert
+            await query.answer(gear_reward_message, show_alert=True)
+            # Clear the pending reward
+            context.user_data.pop('pending_gear_reward', None)
+
+            # Delete the gear claim message
+            if query.message:
+                try:
+                    await query.message.delete()
+                except Exception as del_err:
+                    logger.warning(f"Could not delete gear claim message: {del_err}")
+
+            # Check if there's a pending onboarding message to show
+            pending_message = context.user_data.get('pending_onboarding_message')
+            pending_markup = context.user_data.get('pending_onboarding_markup')
+
+            if pending_message:
+                # Wait 2 seconds before showing next step
+                await asyncio.sleep(2)
+
+                # Show the next onboarding step
+                sent_message = await context.bot.send_message(
+                    chat_id=user_id,
+                    text=pending_message,
+                    reply_markup=pending_markup,
+                    parse_mode='HTML'
+                )
+                # Store message ID for later deletion
+                context.user_data['tutorial_message_id'] = sent_message.message_id
+
+                # Clear pending onboarding data
+                context.user_data.pop('pending_onboarding_message', None)
+                context.user_data.pop('pending_onboarding_markup', None)
+        else:
+            await query.answer("🎣 Gear already claimed!", show_alert=True)
+    except Exception as exc:
+        logger.error("Error in claim_gear_reward_callback: %s", exc)
+        await query.answer("❌ Failed to show gear info.", show_alert=True)
+
+
+async def onboarding_claim_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the first catch reward in alert modal and complete tutorial."""
+    import asyncio
+
+    query = update.callback_query
+    try:
+        user_id = update.effective_user.id
+
+        # Get pending reward from context
+        reward_message = context.user_data.get('pending_reward')
+
+        if reward_message:
+            # Show reward in alert (this is the only query.answer we need)
+            await query.answer(reward_message, show_alert=True)
+            # Clear the pending reward
+            context.user_data.pop('pending_reward', None)
+
+            # Delete the congrats message
+            if query.message:
+                try:
+                    await query.message.delete()
+                except Exception as del_err:
+                    logger.warning(f"Could not delete congrats message: {del_err}")
+
+            # Wait 2 seconds before showing final message
+            await asyncio.sleep(2)
+
+            # Mark onboarding as complete
+            await complete_onboarding(user_id)
+
+            # Send final completion message
+            final_message, final_keyboard = await onboarding_handler._build_completion_step(user_id)
+            final_markup = InlineKeyboardMarkup(final_keyboard) if final_keyboard else None
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=final_message,
+                reply_markup=final_markup,
+                parse_mode='HTML'
+            )
+        else:
+            await query.answer("🏆 Reward already claimed!", show_alert=True)
+    except Exception as exc:
+        logger.error("Error in onboarding_claim_reward_callback: %s", exc)
+        await query.answer("❌ Failed to show reward.", show_alert=True)
+
+
+async def onboarding_continue_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Move to the cast instruction step without claiming the bonus."""
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        current_step = await onboarding_handler.get_user_current_step(user_id)
+        if current_step == onboarding_handler.STEP_COMPLETED:
+            await query.answer("Tutorial already completed.", show_alert=True)
+            return
+
+        await onboarding_handler.advance_step(user_id, onboarding_handler.STEP_CAST)
+        await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_CAST)
+    except Exception as exc:
+        logger.error("Error in onboarding_continue_cast_callback: %s", exc)
+        await query.answer("❌ Failed to proceed to cast.", show_alert=True)
+
+
+async def onboarding_send_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Trigger cast flow directly from onboarding button."""
+    from src.bot.commands.cast import cast
+
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        # Delete the tutorial message
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete tutorial message: {del_err}")
+
+        await cast(update, context)
+    except Exception as exc:
+        logger.error("Error in onboarding_send_cast_callback: %s", exc)
+        await query.answer("❌ Failed to send command.", show_alert=True)
+
+
+async def onboarding_send_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Trigger hook flow directly from onboarding button."""
+    from src.bot.commands.hook import hook
+
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        # Delete the tutorial message
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete tutorial message: {del_err}")
+
+        await hook(update, context)
+    except Exception as exc:
+        logger.error("Error in onboarding_send_hook_callback: %s", exc)
+        await query.answer("❌ Failed to send command.", show_alert=True)

@@ -6,39 +6,16 @@ Handles bot startup, configuration, and graceful shutdown.
 import os
 import asyncio
 import logging
-from telegram.ext import Application, CommandHandler, ChatMemberHandler, CallbackQueryHandler, PreCheckoutQueryHandler, MessageHandler, filters, Defaults
+from dotenv import load_dotenv
+from telegram.ext import Application, Defaults
 from telegram import Update
 from telegram.ext import ContextTypes
 
+# Load environment variables from .env file
+load_dotenv()
+
 from src.database.db_manager import init_database, close_pool, reset_database
-from src.bot.command_handlers import (
-    cast,
-    hook,
-    status,
-    test_card,
-    help_command,
-    start_command,
-    leaderboard,
-    pnl,
-    pond_selection_callback,
-    gofishing,
-    join_fishing_callback,
-    onboarding_start_callback,
-    onboarding_skip_callback,
-    onboarding_claim_bonus_callback,
-    claim_gear_reward_callback,
-    onboarding_claim_reward_callback,
-    onboarding_continue_cast_callback,
-    onboarding_send_cast_callback,
-    onboarding_send_hook_callback,
-    handle_pre_checkout_query,
-    handle_successful_payment,
-    buy_bait_command,
-    buy_bait_callback,
-    transactions_command,
-)
-from src.bot.user_commands import skip_onboarding_command
-from src.bot.group_handlers import my_chat_member_handler, chat_member_handler
+from src.bot.core.handlers_registry import register_all_handlers
 from src.webapp.web_server import start_web_server
 
 # Configure logging level from environment
@@ -74,18 +51,22 @@ application = None
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle data from WebApp"""
     try:
+        from src.bot.commands.cast import cast
+        from src.bot.commands.hook import hook
+        from src.bot.commands.status import status
+
         if update.message and update.message.web_app_data:
             data = update.message.web_app_data.data
             user = update.effective_user
             chat = update.effective_chat
-            
+
             logger.info(f"WebApp data received from user {user.id}: {data}")
-            
+
             # Если данные - это команда, выполняем её
             if data.startswith('/'):
                 command = data.strip()
                 logger.info(f"Executing command from WebApp: {command}")
-                
+
                 # Создаем фейковое сообщение с командой
                 if command == '/cast':
                     await cast(update, context)
@@ -97,7 +78,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     await update.message.reply_text(f"Unknown command: {command}")
             else:
                 await update.message.reply_text("Data received from WebApp!")
-                
+
     except Exception as e:
         logger.error(f"Error handling WebApp data: {e}")
         if update.message:
@@ -115,47 +96,10 @@ def create_application():
     """Create and configure the bot application"""
     defaults = Defaults(parse_mode='HTML')
     application = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
-    
-    # Add command handlers
-    application.add_handler(CommandHandler("cast", cast))
-    application.add_handler(CommandHandler("hook", hook))
-    application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("test_card", test_card))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("leaderboard", leaderboard))
-    application.add_handler(CommandHandler("pnl", pnl))
-    application.add_handler(CommandHandler("gofishing", gofishing))
-    application.add_handler(CommandHandler("buy", buy_bait_command))
-    application.add_handler(CommandHandler("transactions", transactions_command))
-    application.add_handler(CommandHandler("skip", skip_onboarding_command))
-    
-    # Add payment handlers
-    application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
-    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
-    
-    # Add WebApp data handler
-    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
-    
-    # Add group management handlers
-    application.add_handler(ChatMemberHandler(my_chat_member_handler, ChatMemberHandler.MY_CHAT_MEMBER))
-    application.add_handler(ChatMemberHandler(chat_member_handler, ChatMemberHandler.CHAT_MEMBER))
-    
-    # Add callback handlers
-    application.add_handler(CallbackQueryHandler(pond_selection_callback, pattern=r"^select_pond_"))
-    application.add_handler(CallbackQueryHandler(join_fishing_callback, pattern=r"^join_fishing_"))
-    application.add_handler(CallbackQueryHandler(buy_bait_callback, pattern=r"^buy_bait_"))
-    
-    # Add onboarding callback handlers
-    application.add_handler(CallbackQueryHandler(onboarding_start_callback, pattern=r"^ob_start$"))
-    application.add_handler(CallbackQueryHandler(onboarding_skip_callback, pattern=r"^ob_skip$"))
-    application.add_handler(CallbackQueryHandler(onboarding_claim_bonus_callback, pattern=r"^ob_claim_bonus$"))
-    application.add_handler(CallbackQueryHandler(claim_gear_reward_callback, pattern=r"^claim_gear_reward$"))
-    application.add_handler(CallbackQueryHandler(onboarding_claim_reward_callback, pattern=r"^ob_claim_reward$"))
-    application.add_handler(CallbackQueryHandler(onboarding_continue_cast_callback, pattern=r"^ob_continue_cast$"))
-    application.add_handler(CallbackQueryHandler(onboarding_send_cast_callback, pattern=r"^ob_send_cast$"))
-    application.add_handler(CallbackQueryHandler(onboarding_send_hook_callback, pattern=r"^ob_send_hook$"))
-    
+
+    # Register all handlers through centralized registry
+    register_all_handlers(application)
+
     return application
 
 async def startup(application):

@@ -41,65 +41,114 @@ The bot uses:
 ### Project Structure:
 ```
 src/
-├── bot/                          # Telegram bot components (refactored into smaller modules)
-│   ├── telegram_bot.py           # Main bot module (13 lines)
-│   ├── command_handlers.py       # Command handler imports and registration (17 lines)
-│   ├── fishing_commands.py       # Core fishing commands: cast, hook, status (404 lines)
-│   ├── user_commands.py          # User commands: start, help, pnl (173 lines)
-│   ├── leaderboard_commands.py   # Leaderboard and test commands (163 lines)
-│   ├── group_commands.py         # Group commands and callbacks (280 lines)
-│   ├── private_fishing_helpers.py # Helper functions for private fishing (318 lines)
-│   ├── payment_commands.py       # Telegram Stars payment handlers (320 lines)
-│   ├── group_handlers.py         # Group management handlers (121 lines)
-│   ├── animations.py             # Fishing animations and status updates (220 lines)
-│   └── message_templates.py      # Dynamic message templates from database (440 lines)
+├── bot/                          # Telegram bot components (clean modular architecture)
+│   ├── core/                     # System components
+│   │   └── handlers_registry.py  # Centralized handler registration
+│   │
+│   ├── utils/                    # Reusable utilities
+│   │   ├── telegram_utils.py     # safe_reply, safe_send_message, etc.
+│   │   └── validators.py         # Validation logic (BAIT, positions, rate limits)
+│   │
+│   ├── ui/                       # UI components
+│   │   ├── animations.py         # Cast/hook animations
+│   │   ├── messages.py           # Message templates
+│   │   └── formatters.py         # Data formatting
+│   │
+│   ├── commands/                 # Bot commands (one file per command/feature)
+│   │   ├── cast.py               # /cast command
+│   │   ├── hook.py               # /hook command
+│   │   ├── status.py             # /status command
+│   │   ├── start.py              # /start, /help, /pnl, /skip
+│   │   ├── leaderboard.py        # /leaderboard command
+│   │   ├── payments.py           # /buy, /transactions, payment handlers
+│   │   └── dev.py                # /test_card (development)
+│   │
+│   ├── features/                 # Feature modules
+│   │   ├── onboarding.py         # Onboarding system + callbacks
+│   │   ├── group_management.py   # Group pond management + gofishing
+│   │   └── fishing_flow.py       # Reusable fishing logic (private chat flows)
+│   │
+│   └── random_messages.py        # Random flavor text helpers
+│
 ├── database/
-│   └── db_manager.py             # PostgreSQL database operations with fish system
+│   └── db_manager.py             # PostgreSQL database operations
+│
 ├── utils/
 │   ├── crypto_price.py           # Multi-currency price fetching and P&L calculations
-│   └── bunny_cdn.py             # Bunny CDN integration for image delivery
+│   └── bunny_cdn.py              # Bunny CDN integration for image delivery
+│
 ├── generators/
 │   └── fish_card_generator.py    # AI-powered fish card generation with CDN upload
+│
 └── webapp/                       # Telegram Mini App components
-    └── web_server.py             # aiohttp web server with API endpoints and CDN fallback
+    └── web_server.py             # aiohttp web server with API endpoints
 webapp/
 ├── templates/
 │   └── index.html                # Main Mini App interface
 └── static/
     ├── css/
-    │   ├── game.css             # Gaming-style CSS with RPG aesthetics
-    │   └── skeleton.css         # Skeleton loading animations and states
-    ├── js/app.js                # Mini App JavaScript with CDN integration and lazy loading
+    │   ├── game.css              # Gaming-style CSS with RPG aesthetics
+    │   └── skeleton.css          # Skeleton loading animations
+    ├── js/app.js                 # Mini App JavaScript with CDN integration
     └── images/
-        ├── fisherman.svg        # Player avatar image
-        ├── long-rod.svg         # Long trading rod asset
-        └── short-rod.svg        # Short trading rod asset
+        ├── fisherman.svg         # Player avatar
+        ├── long-rod.svg          # Long trading rod asset
+        └── short-rod.svg         # Short trading rod asset
 ```
 
-### 🏗️ Bot Command Architecture (Refactored)
+### 🏗️ Architecture Principles
 
-**Key files:**
-- `main.py` - Entry point with bot initialization, conflict handling, HTML parse mode, and web server
-- `src/bot/command_handlers.py` - **NEW**: Centralized imports and command registration (17 lines)
-- `src/bot/fishing_commands.py` - **NEW**: Core fishing functionality (cast, hook, status) (404 lines)
-- `src/bot/user_commands.py` - **NEW**: User-oriented commands (start, help, pnl) (173 lines)  
-- `src/bot/leaderboard_commands.py` - **NEW**: Rankings and test commands (163 lines)
-- `src/bot/group_commands.py` - **NEW**: Group commands and callbacks (gofishing, pond selection) (280 lines)
-- `src/bot/private_fishing_helpers.py` - **NEW**: Helper functions for private fishing operations (318 lines)
-- `src/bot/payment_commands.py` - **NEW**: Telegram Stars payment handlers (buy, transactions, invoice processing) (320 lines)
-- `src/bot/group_handlers.py` - Group event handlers (bot addition, member changes) (121 lines)
-- `src/bot/animations.py` - Fishing animations and status updates (220 lines)
-- `src/bot/message_templates.py` - Dynamic message templates from database (440 lines)
+**Separation of Concerns:**
+- `core/` - System-level infrastructure (handler registration)
+- `utils/` - Reusable helper functions (no business logic)
+- `ui/` - Presentation layer (animations, messages, formatting)
+- `commands/` - Business logic for bot commands (one command per file)
+- `features/` - Complex feature modules (onboarding, groups, fishing flows)
 
-**Other key files:**
-- `src/database/db_manager.py` - Extended PostgreSQL database operations (users, positions, fish, AI prompts, CDN URLs)
-- `src/webapp/web_server.py` - aiohttp server with REST API endpoints and smart CDN fallback system
-- `src/utils/bunny_cdn.py` - Bunny CDN integration with image optimization and upload capabilities
-- `webapp/templates/index.html` - Single-page Mini App with lobby, collection, and rods screens
-- `webapp/static/js/app.js` - Mini App JavaScript with CDN integration, lazy loading, and skeleton states
-- `webapp/static/css/game.css` - RPG-style CSS with gaming aesthetics and proper aspect ratios
-- `webapp/static/css/skeleton.css` - Animated skeleton loaders with shimmer effects
-- `migrate_images_to_cdn.py` - Background script for migrating existing images to CDN
+**Dependencies Flow:**
+```
+commands → features → ui → utils
+main → core/handlers_registry → commands/features
+```
+
+**Key Design Rules:**
+1. **One responsibility per file** - Each module does one thing well
+2. **No code duplication** - Shared code extracted to utils/ or features/
+3. **Clear dependencies** - Higher-level modules depend on lower-level ones
+4. **Easy to extend** - New command = new file in commands/
+5. **Centralized registration** - All handlers registered in core/handlers_registry.py
+
+### 🗂️ Key Files
+
+**Entry Point:**
+- `main.py` - Bot initialization, environment setup, web server startup
+
+**Core System:**
+- `src/bot/core/handlers_registry.py` - Single source of truth for all handler registration
+
+**Commands (Business Logic):**
+- `src/bot/commands/cast.py` - /cast command with pond selection
+- `src/bot/commands/hook.py` - /hook command with parallel animation and price fetching
+- `src/bot/commands/status.py` - /status command showing current position
+- `src/bot/commands/start.py` - /start, /help, /pnl, /skip commands
+- `src/bot/commands/leaderboard.py` - /leaderboard command
+- `src/bot/commands/payments.py` - Telegram Stars payment system
+
+**Features (Complex Modules):**
+- `src/bot/features/onboarding.py` - Tutorial flow + all onboarding callbacks
+- `src/bot/features/group_management.py` - Group pond creation, /gofishing, member tracking
+- `src/bot/features/fishing_flow.py` - Private chat fishing helpers, pond selection callback
+
+**UI Layer:**
+- `src/bot/ui/animations.py` - Cast/hook animation sequences
+- `src/bot/ui/messages.py` - Message template generation
+- `src/bot/ui/formatters.py` - Data formatting for display
+
+**Database & Services:**
+- `src/database/db_manager.py` - PostgreSQL operations
+- `src/webapp/web_server.py` - Mini App backend
+- `src/utils/bunny_cdn.py` - CDN integration
+- `src/generators/fish_card_generator.py` - AI fish card generation
 
 ## Development Commands
 

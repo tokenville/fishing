@@ -14,7 +14,7 @@ from src.database.db_manager import (
     get_transaction_by_payload, complete_transaction, fail_transaction,
     get_user_transactions, get_user
 )
-from src.bot.animations import safe_reply
+from src.bot.utils.telegram_utils import safe_reply
 
 logger = logging.getLogger(__name__)
 
