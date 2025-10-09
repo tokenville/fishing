@@ -6,7 +6,7 @@ Handles pre-checkout queries, successful payments, and purchase commands.
 import os
 import logging
 import uuid
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Chat
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
@@ -110,7 +110,7 @@ async def handle_successful_payment(update: Update, context: ContextTypes.DEFAUL
 <b>🎣 Ready to fish!</b>
 Your BAIT tokens have been added to your account. Use /cast to start fishing!
 
-<i>Thank you for supporting Big Catchy! 🐟</i>"""
+<i>Thank you for supporting Hooked Crypto! 🐟</i>"""
             
             await safe_reply(update, success_message)
             logger.info(f"Payment completed successfully for user {user_id}, added {bait_received} BAIT")
@@ -126,7 +126,12 @@ async def buy_bait_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Handle /buy command - show BAIT purchase options"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
-    
+    chat = update.effective_chat
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
+
     try:
         # Check if user exists
         user = await get_user(user_id)
@@ -237,7 +242,12 @@ async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle /transactions command - show user's purchase history"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
-    
+    chat = update.effective_chat
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
+
     try:
         # Get user transactions
         transactions = await get_user_transactions(user_id, limit=10)

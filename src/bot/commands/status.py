@@ -4,7 +4,7 @@
 
 import logging
 
-from telegram import Update
+from telegram import Update, Chat
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import get_user, get_active_position, get_pond_by_id, get_rod_by_id
@@ -19,6 +19,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status command - show current fishing position"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    chat = update.effective_chat
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
 
     try:
         # Get user

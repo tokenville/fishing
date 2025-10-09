@@ -8,3 +8,7 @@ __pycache__/
 .env.local
 .env.production
 start_bot.sh
+
+# Don't commit cache files
+generated_fish_cache/
+.fish_card_cache/

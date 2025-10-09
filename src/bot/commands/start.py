@@ -5,7 +5,7 @@
 import os
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Chat
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
@@ -26,8 +26,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Handle /start command - show onboarding for new users, full guide for completed users"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    chat = update.effective_chat
 
     logger.debug(f"START command called by user {user_id} ({username})")
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
 
     try:
         # Get or create user
@@ -100,8 +105,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Handle /help command - always show full game guide regardless of inheritance status"""
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    chat = update.effective_chat
 
     logger.debug(f"HELP command called by user {user_id} ({username})")
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
 
     try:
         # Get dynamic help text from database
@@ -119,6 +129,11 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    chat = update.effective_chat
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
 
     try:
         # Get user virtual balance
@@ -167,6 +182,11 @@ async def skip_onboarding_command(update: Update, context: ContextTypes.DEFAULT_
     from src.bot.features.onboarding import skip_onboarding
 
     user_id = update.effective_user.id
+    chat = update.effective_chat
+
+    # Ignore in group chats
+    if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
+        return
 
     try:
         await skip_onboarding(user_id)

@@ -37,12 +37,8 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug(f"HOOK command called by user {user_id} ({username})")
 
     try:
+        # Ignore in group chats
         if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
-            await safe_reply(
-                update,
-                f"🎣 <b>Hook доступен только в личке!</b>\n\n"
-                f"Используй /hook @{context.bot.username} в приватном чате, чтобы завершить ловлю."
-            )
             return
 
         # Check general rate limit
@@ -235,7 +231,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 share_button = [[InlineKeyboardButton("📢 Share in group", callback_data="share_hook")]]
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"🎣 <b>Great catch!</b> Want to share it with the group?",
+                    text=f"🎣 <b>Great catch!</b> Want to share it with the group?\n\n<i>You'll get your 🪱 BAIT back for sharing!</i>",
                     reply_markup=InlineKeyboardMarkup(share_button),
                     parse_mode='HTML'
                 )

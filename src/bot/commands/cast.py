@@ -85,12 +85,8 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat = update.effective_chat
     message = update.effective_message
 
+    # Ignore in group chats
     if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
-        await safe_reply(
-            update,
-            f"🎣 <b>Cast работает только в личке!</b>\n\n"
-            f"Напиши /cast @{context.bot.username} в приватном чате, чтобы продолжить."
-        )
         return
 
     logger.debug(f"CAST command called by user {user_id} ({username}) in chat {chat.id if chat else 'unknown'}")

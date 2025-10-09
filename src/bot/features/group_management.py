@@ -135,16 +135,8 @@ async def gofishing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug(f"GOFISHING command called by user {user_id} ({username}) in chat {chat.id if chat else 'unknown'}")
 
     try:
-        # PRIVATE CHAT RESTRICTION: Only works in groups
+        # Only works in groups - ignore in private chats
         if chat.type not in [Chat.GROUP, Chat.SUPERGROUP]:
-            await safe_reply(update,
-                f"🎣 <b>This command only works in group chats!</b>\n\n"
-                f"<b>🌊 To start fishing:</b>\n"
-                f"1. Add me to a Telegram group\n"
-                f"2. Use /gofishing in that group\n"
-                f"3. Then fish from private chat with access to that group's pond\n\n"
-                f"<i>You can already fish from available group ponds using /cast!</i>"
-            )
             return
 
         # Check rate limit
@@ -284,7 +276,7 @@ async def join_fishing_callback(update: Update, context: ContextTypes.DEFAULT_TY
         pond_name, pair_count = get_pond_name_and_type(group_pond['name'], group_pond.get('member_count', 2))
 
         # Update the welcome message with new count
-        updated_msg = f"""🎣 <b>Welcome to Big Catchy Fishing!</b>
+        updated_msg = f"""🎣 <b>Welcome to Hooked Crypto Fishing!</b>
 
 🌊 <b>Pond:</b> {pond_name}
 👥 <b>Group Members:</b> {group_pond.get('member_count', 2)}

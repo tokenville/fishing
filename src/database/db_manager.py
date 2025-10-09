@@ -498,10 +498,21 @@ async def use_bait(telegram_id: int) -> bool:
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute('''
-            UPDATE users 
+            UPDATE users
             SET bait_tokens = bait_tokens - 1
             WHERE telegram_id = $1 AND bait_tokens > 0
         ''', telegram_id)
+        return result.split()[-1] != '0'
+
+async def add_bait_tokens(telegram_id: int, amount: int) -> bool:
+    """Add BAIT tokens to user's balance"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('''
+            UPDATE users
+            SET bait_tokens = bait_tokens + $1
+            WHERE telegram_id = $2
+        ''', amount, telegram_id)
         return result.split()[-1] != '0'
 
 async def _insert_default_ponds(conn: asyncpg.Connection):

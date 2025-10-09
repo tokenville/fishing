@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.bot.random_messages import get_random_cast_appendix, get_random_hook_appendix
+from src.database.db_manager import add_bait_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -131,9 +132,12 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                     disable_notification=True
                 )
 
-            # Update button to show success
+            # Award 1 BAIT token for sharing
+            await add_bait_tokens(user_id, 1)
+
+            # Update button to show success with BAIT reward
             await query.edit_message_text(
-                "✅ <b>Shared successfully!</b>\n\n<i>Your catch has been posted to the group.</i>",
+                "✅ <b>Shared successfully!</b>\n\n<i>Your catch has been posted to the group.</i>\n\n🪱 <b>+1 BAIT</b> <i>reward for sharing!</i>",
                 parse_mode='HTML'
             )
 

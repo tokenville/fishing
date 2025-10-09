@@ -202,9 +202,7 @@ async def get_full_start_message(user_id: int, username: str) -> str:
         status_emoji = "🎣" if active_position else "🌊"
         fishing_status = "Currently fishing!" if active_position else "Ready to fish"
 
-        start_message = f"""<b>🎣 Welcome to Big Catchy, {username}!</b>
-
-<b>DEX trading meets fishing!</b>
+        start_message = f"""<b>🎣 Welcome to Hooked Crypto, {username}!</b>
 Make leveraged trades and catch fish based on your performance - from trash catches to legendary sea monsters!
 
 <b>🎮 How it works:</b>
@@ -213,24 +211,11 @@ Make leveraged trades and catch fish based on your performance - from trash catc
 - Watch prices like waiting for fish bite
 - Close trade = discover your catch!
 
-<b>Your Stats:</b>
-🎯 <b>Level:</b> {user_level}
-🪱 <b>$BAIT Tokens:</b> {bait_tokens}
-🎣 <b>Fishing Rods:</b> {rods_count}
-🌊 <b>Available Ponds:</b> {ponds_count}
-📊 <b>Status:</b> {fishing_status}
-
 <b>🎣 Quick Commands:</b>
 - /cast - Start fishing (make trade)
 - /hook - Close position & see catch
 - /leaderboard - Top fishermen
 - /help - This guide
-
-<b>🐟 Your catches depend on trading results:</b>
-🗑️ Losses = Trash (soggy pizza, broken dreams)
-🐟 Small profit = Tiny fish (anxiety anchovy)
-🦈 Big gains = Epic fish (millionaire marlin)
-🐋 Massive wins = Legends (cosmic whale)
 
 <i>Each cast costs 1 $BAIT token!</i>"""
 
@@ -239,4 +224,4 @@ Make leveraged trades and catch fish based on your performance - from trash catc
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Error building full start message for user {user_id}: {e}")
-        return f"<b>🎣 Welcome to Big Catchy, {username}!</b>\n\nUse /help for game guide."
+        return f"<b>🎣 Welcome to Hooked Crypto, {username}!</b>\n\nUse /help for game guide."
