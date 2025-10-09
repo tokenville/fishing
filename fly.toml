@@ -13,6 +13,7 @@ primary_region = "arn"
   BUNNYCDN_STORAGE_ZONE = "miniapps"
   BUNNYCDN_HOSTNAME = "se.storage.bunnycdn.com"
   BUNNYCDN_PUBLIC_URL = "https://miniapps.b-cdn.net"
+  ONBOARDING_GROUP_INVITE_URL = "https://t.me/bigcatchytestgroup"
 
 # HTTP service configuration for Mini App
 [http_service]
