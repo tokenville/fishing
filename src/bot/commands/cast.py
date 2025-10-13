@@ -370,26 +370,26 @@ async def _start_cast_for_pond(
                     parse_mode='HTML'
                 )
 
-        # Share prompt for group ponds (same UX as hook command)
-        if pond.get('pond_type') == 'group' and pond.get('chat_id'):
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        # # Share prompt for group ponds (same UX as hook command)
+        # if pond.get('pond_type') == 'group' and pond.get('chat_id'):
+        #     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-            context.user_data['share_cast_data'] = {
-                'pond_name': pond['name'],
-                'pond_chat_id': pond['chat_id'],
-                'username': username
-            }
+        #     context.user_data['share_cast_data'] = {
+        #         'pond_name': pond['name'],
+        #         'pond_chat_id': pond['chat_id'],
+        #         'username': username
+        #     }
 
-            share_button = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("📢 Share in group", callback_data="share_cast")]]
-            )
+        #     share_button = InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("📢 Share in group", callback_data="share_cast")]]
+        #     )
 
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="🎣 <b>Cast complete!</b> Want to share it with the group?",
-                reply_markup=share_button,
-                parse_mode='HTML'
-            )
+        #     await context.bot.send_message(
+        #         chat_id=user_id,
+        #         text="🎣 <b>Cast complete!</b> Want to share it with the group?",
+        #         reply_markup=share_button,
+        #         parse_mode='HTML'
+        #     )
 
         logger.info(f"User {username} started fishing in pond {pond_id}")
 

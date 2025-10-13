@@ -137,7 +137,7 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # Update button to show success with BAIT reward
             await query.edit_message_text(
-                "✅ <b>Shared successfully!</b>\n\n<i>Your catch has been posted to the group.</i>\n\n🪱 <b>+1 BAIT</b> <i>reward for sharing!</i>",
+                "✅ <b>Shared successfully!</b>\n\n<i>Your catch has been posted to the group.</i>\n\n🪱 <b>+1 BAIT</b> <i>reward for sharing!\n\nUse /cast to get more fish.</i>",
                 parse_mode='HTML'
             )
 

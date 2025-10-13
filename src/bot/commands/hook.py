@@ -14,12 +14,12 @@ from src.database.db_manager import (
     can_use_guaranteed_hook, should_get_special_catch, mark_onboarding_action
 )
 from src.utils.crypto_price import (
-    get_crypto_price, calculate_pnl, format_time_fishing,
-    get_fishing_time_seconds, get_price_error_message
+    get_crypto_price, calculate_pnl, format_time_fishing, get_price_error_message
 )
 from src.bot.ui.formatters import format_fishing_complete_caption
-from src.bot.ui.messages import get_catch_story_from_db, get_quick_fishing_message
+from src.bot.ui.messages import get_catch_story_from_db
 from src.bot.utils.telegram_utils import safe_reply
+from src.bot.utils.validators import check_quick_fishing
 from src.bot.ui.animations import animate_hook_sequence, send_fish_card_or_fallback
 from src.generators.fish_card_generator import generate_fish_card_from_db
 from src.bot.features.onboarding import handle_onboarding_command
@@ -67,24 +67,14 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         leverage = rod['leverage'] if rod else 1.5
         entry_price = position['entry_price']
 
-        # Pre-calculate time for quick fishing check (no API call needed)
+        # Calculate fishing time for later use
         time_fishing = format_time_fishing(position['entry_time'])
-        fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
 
-        # QUICK FISHING CHECK - must be done BEFORE animation starts!
-        if fishing_time_seconds < 60:
-            # We need a quick price check to see if P&L is minimal
-            try:
-                quick_price = await get_crypto_price(base_currency)
-                quick_pnl = calculate_pnl(entry_price, quick_price, leverage)
-
-                if abs(quick_pnl) < 0.1:
-                    quick_message = get_quick_fishing_message(fishing_time_seconds)
-                    await safe_reply(update, f"{quick_message}\n\n⏰ <b>Fishing Time:</b> {time_fishing}\n📈 <b>P&L:</b> {quick_pnl:+.4f}%\n\n<i>Wait at least 1 minute for the market to move!</i>")
-                    return
-            except Exception as e:
-                logger.warning(f"Quick fishing check failed, allowing hook anyway: {e}")
-                # If price check fails, allow fishing to continue
+        # QUICK FISHING CHECK - temporarily disabled
+        # should_block, quick_message = await check_quick_fishing(position, base_currency, entry_price, leverage)
+        # if should_block:
+        #     await safe_reply(update, quick_message)
+        #     return
 
         # Get user level
         user = await get_user(user_id)
