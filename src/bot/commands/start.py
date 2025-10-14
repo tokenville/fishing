@@ -18,6 +18,7 @@ from src.bot.utils.telegram_utils import safe_reply
 from src.bot.features.onboarding import (
     get_current_onboarding_step, send_onboarding_message, should_show_mini_app_button
 )
+from src.bot.ui.blocks import get_miniapp_button
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +169,23 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 """
 
-        message += "<i>Use /cast to start fishing and grow your balance!</i>"
+        # Show balance with CTA button
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, CTABlock
 
-        await safe_reply(update, message)
+        view = get_view_controller(context, user_id)
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=BlockData(
+                header="",  # Header is in message
+                body=message,
+                buttons=[("🎣 Start Fishing", "quick_cast")],
+                web_app_buttons=get_miniapp_button(),
+                footer="Grow your balance with smart fishing!"
+            ),
+            clear_previous=False
+        )
 
     except Exception as e:
         logger.error(f"Error in pnl command: {e}")

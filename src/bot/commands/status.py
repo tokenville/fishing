@@ -36,8 +36,28 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         position = await get_active_position(user_id)
 
         if not position:
+            # User is idle - show CTA block with cast + miniapp buttons
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
             bait_tokens = user['bait_tokens'] if user else 0
-            await safe_reply(update, format_no_fishing_status(username, bait_tokens))
+
+            # Format status info
+            status_info = format_no_fishing_status(username, bait_tokens)
+
+            # Show status as CTA block with action buttons
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=CTABlock,
+                data=BlockData(
+                    header="📊 Status",
+                    body=status_info,
+                    buttons=[("🎣 Start Fishing", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                ),
+                clear_previous=False  # Don't clear previous CTA for status check
+            )
             return
 
         # Get current P&L with enhanced display
@@ -54,16 +74,36 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pnl_color = get_pnl_color(pnl_percent)
         time_fishing = format_time_fishing(position['entry_time'])
 
-        # Send enhanced status message
+        # Send enhanced status message as Info block (fishing in progress)
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData
+
         pond_name = pond['name'] if pond else 'Unknown Pond'
         pond_pair = pond['trading_pair'] if pond else f'{base_currency}/USDT'
         rod_name = rod['name'] if rod else 'Unknown Rod'
         user_level = user['level'] if user else 1
 
-        await safe_reply(update, format_enhanced_status_message(
+        status_text = format_enhanced_status_message(
             username, pond_name, pond_pair, rod_name, leverage,
             entry_price, current_price, pnl_percent, time_fishing, user_level
-        ))
+        )
+
+        # Show as CTA block with hook + miniapp buttons (buttons are primary UI)
+        from src.bot.ui.blocks import CTABlock, get_miniapp_button
+
+        view = get_view_controller(context, user_id)
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=BlockData(
+                header="",  # Header is included in status_text
+                body=status_text,
+                buttons=[("🪝 Hook Now", "quick_hook")],
+                web_app_buttons=get_miniapp_button(),
+                footer="Timing is everything in fishing"
+            ),
+            clear_previous=False  # Don't clear previous CTA for status check
+        )
 
     except Exception as e:
         logger.error(f"Error in status command: {e}")

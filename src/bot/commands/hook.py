@@ -23,6 +23,7 @@ from src.bot.utils.validators import check_quick_fishing
 from src.bot.ui.animations import animate_hook_sequence, send_fish_card_or_fallback
 from src.generators.fish_card_generator import generate_fish_card_from_db
 from src.bot.features.onboarding import handle_onboarding_command
+from src.bot.ui.blocks import get_miniapp_button
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,20 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         position = await get_active_position(user_id)
 
         if not position:
-            await safe_reply(update, f"🎣 {username} is not fishing! Use /cast to throw the fishing rod.")
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Not Fishing!",
+                    body=f"{username}, you don't have an active fishing session. Cast your rod first!",
+                    buttons=[("🎣 Start Fishing", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                )
+            )
             return
 
         # Get pond and rod data for the position
@@ -79,6 +93,11 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Get user level
         user = await get_user(user_id)
         user_level = user['level'] if user else 1
+
+        # Transition to HOOKING state
+        from src.bot.ui.state_machine import get_state_machine, UserState
+        state_machine = get_state_machine(user_id)
+        await state_machine.transition_to(UserState.HOOKING, context.user_data)
 
         # Start PARALLEL tasks immediately - no blocking!
         # 1. Hook animation (12.5 seconds)
@@ -205,10 +224,14 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 complete_story
             )
 
-            # Add share button if this is a group pond and we're in private chat
+            # Use ViewController to show CTA block
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock
+
+            view = get_view_controller(context, user_id)
+
+            # Store hook data for sharing (if group pond)
             if pond and pond.get('pond_type') == 'group' and pond.get('chat_id') and update.effective_chat.type == Chat.PRIVATE:
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                # Store hook data for sharing
                 context.user_data['share_hook_data'] = {
                     'fish_name': fish_data['name'],
                     'fish_emoji': fish_data['emoji'],
@@ -218,13 +241,34 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     'username': username,
                     'card_image_bytes': card_image
                 }
-                share_button = [[InlineKeyboardButton("📢 Share in group", callback_data="share_hook")]]
-                await context.bot.send_message(
+
+                # Show CTA with Share + MiniApp buttons
+                await view.show_cta_block(
                     chat_id=user_id,
-                    text=f"🎣 <b>Great catch!</b> Want to share it with the group?\n\n<i>You'll get your 🪱 BAIT back for sharing!</i>",
-                    reply_markup=InlineKeyboardMarkup(share_button),
-                    parse_mode='HTML'
+                    block_type=CTABlock,
+                    data=BlockData(
+                        header="🎉 Great Catch!",
+                        body=f"You caught {fish_data['emoji']} {fish_data['name']}! Share it with your group to get +1 BAIT token reward.",
+                        buttons=[("📢 Share in Group (🪱 +1 BAIT)", "share_hook")],
+                    web_app_buttons=get_miniapp_button(),
+                        footer="Sharing gives you your BAIT back!"
+                    )
                 )
+            else:
+                # Show CTA with Cast + MiniApp buttons
+                await view.show_cta_block(
+                    chat_id=user_id,
+                    block_type=CTABlock,
+                    data=BlockData(
+                        header="🎉 Fish Caught!",
+                        body=f"You caught {fish_data['emoji']} {fish_data['name']}! Ready for another catch?",
+                        buttons=[("🎣 Cast Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                    )
+                )
+
+            # Transition to CATCH_COMPLETE state (use same state_machine instance from above)
+            await state_machine.transition_to(UserState.CATCH_COMPLETE, context.user_data)
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete

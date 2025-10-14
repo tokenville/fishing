@@ -15,6 +15,7 @@ from src.database.db_manager import (
     get_user_transactions, get_user
 )
 from src.bot.utils.telegram_utils import safe_reply
+from src.bot.ui.blocks import get_miniapp_button
 
 logger = logging.getLogger(__name__)
 
@@ -100,19 +101,31 @@ async def handle_successful_payment(update: Update, context: ContextTypes.DEFAUL
         
         if success:
             bait_received = transaction['bait_amount'] * transaction['quantity']
-            
-            success_message = f"""🎉 <b>Payment Successful!</b>
 
-💰 <b>Purchase:</b> {transaction['quantity']}x BAIT Pack
+            success_message = f"""💰 <b>Purchase:</b> {transaction['quantity']}x BAIT Pack
 🪱 <b>BAIT Received:</b> {bait_received} tokens
 ⭐ <b>Stars Paid:</b> {transaction['stars_amount']}
 
-<b>🎣 Ready to fish!</b>
-Your BAIT tokens have been added to your account. Use /cast to start fishing!
+Your BAIT tokens have been added to your account. Ready to fish!
 
 <i>Thank you for supporting Hooked Crypto! 🐟</i>"""
-            
-            await safe_reply(update, success_message)
+
+            # Show success with CTA button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=CTABlock,
+                data=BlockData(
+                    header="🎉 Payment Successful!",
+                    body=success_message,
+                    buttons=[("🎣 Start Fishing", "quick_cast")],
+                    web_app_buttons=get_miniapp_button(),
+                    footer="Good luck with your catches!"
+                )
+            )
             logger.info(f"Payment completed successfully for user {user_id}, added {bait_received} BAIT")
         else:
             await safe_reply(update, "❌ Payment processing error. Please contact support.")

@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
+from telegram import Update, Chat
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -21,6 +21,7 @@ from src.database.db_manager import (
 from src.bot.utils.telegram_utils import safe_reply
 from src.bot.features.onboarding import onboarding_handler, handle_onboarding_command
 from src.utils.crypto_price import get_crypto_price
+from src.bot.ui.blocks import get_miniapp_button
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,23 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Check if user is already fishing
         active_position = await get_active_position(user_id)
         if active_position:
-            await safe_reply(update, f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress.")
+            # Show error block with action buttons
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Already Fishing!",
+                    body=f"{username}, you already have a rod in the water. Complete your current catch first!",
+                    buttons=[
+                        ("🪝 Hook Now", "quick_hook"),
+                        ("📊 Check Status", "show_status")
+                    ]
+                )
+            )
             return
 
         # PRIVATE CHAT LOGIC: Show pond selection interface
@@ -175,42 +192,29 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await safe_reply(update, no_ponds_msg)
             return
 
-        # Show pond selection buttons
-        keyboard = []
+        # Show pond selection using CTA block system
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, CTABlock
+
+        # Build pond selection buttons
+        pond_buttons = []
         for pond in user_group_ponds[:10]:  # Limit to 10 ponds to avoid button limit
             pond_name = pond['name']
             member_info = f"({pond['member_count']} members)" if pond.get('member_count') else ""
             button_text = f"{pond_name} {member_info}"[:64]  # Telegram button text limit
+            pond_buttons.append((button_text, f"select_pond_{pond['id']}"))
 
-            keyboard.append([
-                InlineKeyboardButton(
-                    button_text,
-                    callback_data=f"select_pond_{pond['id']}"
-                )
-            ])
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        selection_msg = f"""🎣 <b>Choose Your Fishing Pond</b>
-
-<b>🌊 Available Ponds:</b>
-You have access to {len(user_group_ponds)} pond(s) from your group memberships.
-
-<i>Select a pond below to cast your fishing rod:</i>"""
-
-        if message:
-            await message.reply_text(
-                selection_msg,
-                reply_markup=reply_markup,
-                parse_mode='HTML'
+        view = get_view_controller(context, user_id)
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=BlockData(
+                header="🎣 Choose Your Fishing Pond",
+                body=f"You have access to {len(user_group_ponds)} pond(s) from your group memberships.",
+                buttons=pond_buttons,
+                footer="Each pond has different trading pairs and fish"
             )
-        else:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=selection_msg,
-                reply_markup=reply_markup,
-                parse_mode='HTML'
-            )
+        )
 
     except Exception as e:
         logger.error(f"Error in cast command for user {user_id}: {e}")
@@ -234,18 +238,41 @@ async def _start_cast_for_pond(
 
         # Check if user has enough BAIT
         if user['bait_tokens'] <= 0:
-            await context.bot.send_message(
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
                 chat_id=user_id,
-                text="🎣 No $BAIT tokens! Use /buy command to purchase more 🪱"
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ No BAIT Tokens!",
+                    body="You need BAIT tokens to cast your fishing rod.",
+                    buttons=[("🛒 Buy BAIT", "quick_buy")],
+                    web_app_buttons=get_miniapp_button(),
+                    footer="Each cast costs 1 🪱 BAIT token"
+                )
             )
             return
 
         # Check if user is already fishing
         active_position = await get_active_position(user_id)
         if active_position:
-            await context.bot.send_message(
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
                 chat_id=user_id,
-                text=f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress."
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Already Fishing!",
+                    body=f"{username}, you already have a rod in the water. Complete your current catch first!",
+                    buttons=[
+                        ("🪝 Hook Now", "quick_hook"),
+                        ("📊 Check Status", "show_status")
+                    ]
+                )
             )
             return
 
@@ -258,9 +285,19 @@ async def _start_cast_for_pond(
             await mark_onboarding_action(user_id, 'first_cast')
         else:
             if not await use_bait(user_id):
-                await context.bot.send_message(
+                from src.bot.ui.view_controller import get_view_controller
+                from src.bot.ui.blocks import BlockData, ErrorBlock
+
+                view = get_view_controller(context, user_id)
+                await view.show_cta_block(
                     chat_id=user_id,
-                    text="🎣 Failed to use bait. Try again!"
+                    block_type=ErrorBlock,
+                    data=BlockData(
+                        header="❌ Failed to Use BAIT",
+                        body="Something went wrong while using your BAIT token. Please try again!",
+                        buttons=[("🎣 Try Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                    )
                 )
                 return
 
@@ -268,18 +305,38 @@ async def _start_cast_for_pond(
         active_rod = await ensure_user_has_active_rod(user_id)
 
         if not active_rod:
-            await context.bot.send_message(
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
                 chat_id=user_id,
-                text="🎣 Failed to find active fishing rod! Try again."
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ No Active Rod",
+                    body="Failed to find your active fishing rod. This shouldn't happen!",
+                    buttons=[("📊 Check Status", "show_status")],
+                    web_app_buttons=get_miniapp_button()
+                )
             )
             return
 
         # Get pond info
         pond = await get_pond_by_id(pond_id)
         if not pond:
-            await context.bot.send_message(
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
                 chat_id=user_id,
-                text="🎣 Pond not found! Try again."
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Pond Not Found",
+                    body="The selected fishing pond could not be found. Please try selecting a different pond.",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                )
             )
             return
 
@@ -352,6 +409,12 @@ async def _start_cast_for_pond(
                 )
                 context.user_data['tutorial_message_id'] = sent_message.message_id
         else:
+            # Normal cast completion - show CTA block with action buttons
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock
+
+            view = get_view_controller(context, user_id)
+
             if cast_reward_message:
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 context.user_data['pending_gear_reward'] = cast_reward_message
@@ -364,10 +427,30 @@ async def _start_cast_for_pond(
                     parse_mode='HTML'
                 )
             elif can_use_free:
-                await context.bot.send_message(
+                # First cast - show encouragement with CTA
+                await view.show_cta_block(
                     chat_id=user_id,
-                    text="✨ First cast is free. Wait for the right moment and use /hook when ready!",
-                    parse_mode='HTML'
+                    block_type=CTABlock,
+                    data=BlockData(
+                        header="✨ First Cast Complete!",
+                        body="Your line is in the water. Wait for the right moment to maximize your catch!",
+                        buttons=[("📊 Check Status", "show_status")],
+                    web_app_buttons=get_miniapp_button(),
+                        footer="Pro tip: Check market movement before hooking"
+                    )
+                )
+            else:
+                # Regular cast - show standard CTA
+                await view.show_cta_block(
+                    chat_id=user_id,
+                    block_type=CTABlock,
+                    data=BlockData(
+                        header="🎣 Cast Complete!",
+                        body=f"Your line is ready at {pond['name']}. Watch the market and hook when ready!",
+                        buttons=[("📊 Check Status", "show_status")],
+                    web_app_buttons=get_miniapp_button(),
+                        footer="Timing is everything in fishing"
+                    )
                 )
 
         # # Share prompt for group ponds (same UX as hook command)
@@ -395,9 +478,19 @@ async def _start_cast_for_pond(
 
     except Exception as e:
         logger.error(f"Error in _start_cast_for_pond for user {user_id}: {e}")
-        await context.bot.send_message(
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, ErrorBlock
+
+        view = get_view_controller(context, user_id)
+        await view.show_cta_block(
             chat_id=user_id,
-            text="🎣 Something went wrong! Try /cast again."
+            block_type=ErrorBlock,
+            data=BlockData(
+                header="❌ Something Went Wrong",
+                body="An unexpected error occurred while starting your fishing session. Please try again!",
+                buttons=[("🎣 Try Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+            )
         )
 
 
@@ -414,18 +507,25 @@ async def pond_selection_callback(update, context):
         user_id = update.effective_user.id
         username = update.effective_user.username or update.effective_user.first_name
 
-        # Remove pond selection keyboard to avoid lingering buttons
-        try:
-            await query.delete_message()
-        except Exception:
-            try:
-                await query.edit_message_reply_markup(reply_markup=None)
-            except Exception:
-                pass
-
+        # ViewController will automatically clear the old CTA before showing new ones
+        # Just start the cast process
         await _start_cast_for_pond(user_id, username, pond_id, context)
 
     except Exception as e:
         logger.error(f"Error in pond selection callback: {e}")
         if update.callback_query:
-            await update.callback_query.edit_message_text("🎣 Error selecting pond! Try again.")
+            user_id = update.effective_user.id
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Error Selecting Pond",
+                    body="Something went wrong while selecting your fishing pond. Please try again!",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button()
+                )
+            )

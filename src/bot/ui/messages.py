@@ -26,7 +26,7 @@ def get_cast_animated_sequence():
         "💦 SPLASH! Perfect hit!",
         "🪱 Bait slowly sinking...",
         "🐟 Fish are getting interested in the bait!",
-        "✨ Hook with /hook when you're ready..."
+        "✨ Your line is ready! Wait for the right moment..."
     ]
 
 

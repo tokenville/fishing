@@ -46,8 +46,7 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
         f"Fishery: {pond_name} ({pond_pair})\n"
         f"Fishing time: <b>{time_fishing}</b>\n"
-        f"Position: ${entry_price:.2f} → ${current_price:.2f}\n\n"
-        f"🚀 Use /cast to start fishing!"
+        f"Position: ${entry_price:.2f} → ${current_price:.2f}"
     )
 
 
@@ -88,8 +87,7 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
         f"Fishery: {pond_name} ({pond_pair})\n"
         f"⏱ Fishing time: <b>{time_fishing}</b>\n"
         f"📈 Position: ${entry_price:.2f} → <b>${current_price:.2f}</b>\n"
-        f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})</b>\n\n"
-        f"🪝 Use /hook to pull in your catch!"
+        f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})</b>"
     )
 
 
@@ -159,9 +157,9 @@ def format_no_fishing_status(username, bait_tokens, user_stats=None):
             if best_rod:
                 stats_text += f"💪 Best rod: <b>{best_rod[0]}</b> ({best_rod[1]}x)\n"
 
-        return base_info + stats_text + "\n🚀 Use /cast to start fishing!"
+        return base_info + stats_text
 
-    return base_info + "\n🚀 Use /cast to start fishing!"
+    return base_info
 
 
 def format_new_user_status(username):
@@ -171,8 +169,7 @@ def format_new_user_status(username):
     return (
         f"🎣 <b>Fishing status {safe_username}:</b>\n\n"
         f"🆕 Status: <b>New player</b>\n"
-        f"🪱 BAIT tokens: <b>10</b> (starter bonus)\n\n"
-        f"🚀 Use /cast to start fishing!"
+        f"🪱 BAIT tokens: <b>10</b> (starter bonus)"
     )
 
 

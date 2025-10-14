@@ -31,6 +31,10 @@ def register_all_handlers(application: Application) -> None:
         claim_gear_reward_callback, onboarding_claim_reward_callback, onboarding_continue_cast_callback,
         onboarding_send_cast_callback, onboarding_send_hook_callback
     )
+    from src.bot.features.quick_actions import (
+        quick_cast_callback, quick_hook_callback, show_status_callback,
+        quick_buy_callback, cancel_action_callback
+    )
 
     # Command handlers
     application.add_handler(CommandHandler("cast", cast))
@@ -64,6 +68,13 @@ def register_all_handlers(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(buy_bait_callback, pattern=r"^buy_bait_"))
     application.add_handler(CallbackQueryHandler(share_cast_callback, pattern=r"^share_cast$"))
     application.add_handler(CallbackQueryHandler(share_hook_callback, pattern=r"^share_hook$"))
+
+    # Quick action callback handlers
+    application.add_handler(CallbackQueryHandler(quick_cast_callback, pattern=r"^quick_cast$"))
+    application.add_handler(CallbackQueryHandler(quick_hook_callback, pattern=r"^quick_hook$"))
+    application.add_handler(CallbackQueryHandler(show_status_callback, pattern=r"^show_status$"))
+    application.add_handler(CallbackQueryHandler(quick_buy_callback, pattern=r"^quick_buy$"))
+    application.add_handler(CallbackQueryHandler(cancel_action_callback, pattern=r"^cancel_action$"))
 
     # Onboarding callback handlers
     application.add_handler(CallbackQueryHandler(onboarding_start_callback, pattern=r"^ob_start$"))

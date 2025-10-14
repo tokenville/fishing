@@ -135,10 +135,31 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Award 1 BAIT token for sharing
             await add_bait_tokens(user_id, 1)
 
-            # Update button to show success with BAIT reward
-            await query.edit_message_text(
-                "✅ <b>Shared successfully!</b>\n\n<i>Your catch has been posted to the group.</i>\n\n🪱 <b>+1 BAIT</b> <i>reward for sharing!\n\nUse /cast to get more fish.</i>",
-                parse_mode='HTML'
+            # Use ViewController to show success CTA
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
+            # Clear the old message first
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show CTA with Cast Again + MiniApp buttons
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=CTABlock,
+                data=BlockData(
+                    header="✅ Shared Successfully!",
+                    body="Your catch has been posted to the group!\n\n🪱 +1 BAIT token reward for sharing!",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button(),
+                    footer="Keep fishing to catch more!"
+                )
             )
 
             # Clear stored data
