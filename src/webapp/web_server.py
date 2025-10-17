@@ -23,6 +23,10 @@ from src.database.db_manager import (
     get_suitable_fish, close_position, claim_inheritance, check_inheritance_status
 )
 from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
+from src.utils.fishing_calculations import (
+    calculate_pnl_percent,
+    get_fishing_duration_seconds
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,7 @@ class WebAppServer:
         """CORS middleware for API requests"""
         response = await handler(request)
         response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
+        response.headers['Access-Control-Allow-MTACods'] = 'GET, POST, PUT, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
     
@@ -777,21 +781,25 @@ class WebAppServer:
             rod = await get_rod_by_id(position['rod_id']) if position['rod_id'] else None
             
             # Get base currency for price fetching
-            base_currency = pond['base_currency'] if pond else 'ETH'
+            base_currency = pond['base_currency'] if pond else 'TAC'
             leverage = rod['leverage'] if rod else 1.5
             entry_price = position['entry_price']
-            
-            # Calculate fishing time for quick fishing check
-            from src.database.db_manager import get_fishing_time_seconds
-            fishing_time_seconds = get_fishing_time_seconds(position['entry_time'])
-            
+            entry_time = position['entry_time']
+
+            # Calculate fishing time using centralized UTC-aware helper
+            fishing_time_seconds = get_fishing_duration_seconds(entry_time)
+
             # Get current price
-            from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
             current_price = await get_crypto_price_util(base_currency)
-            
-            # Calculate P&L
-            from src.utils.crypto_price import calculate_pnl
-            pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+
+            # Calculate P&L using centralized helper
+            pnl_percent = calculate_pnl_percent(entry_price, current_price, leverage)
+
+            logger.info(
+                f"WebApp hook: user={user_id}, position_id={position['id']}, "
+                f"entry={entry_price:.2f}, exit={current_price:.2f}, "
+                f"leverage={leverage}x, pnl={pnl_percent:.4f}%, time={fishing_time_seconds}s"
+            )
             
             # Quick fishing check - prevent fishing in under 60 seconds with minimal P&L
             if fishing_time_seconds < 60 and abs(pnl_percent) < 0.1:
@@ -868,7 +876,7 @@ class WebAppServer:
                         'pond_name': pond['name'] if pond else 'Unknown Pond',
                         'rod_name': rod['name'] if rod else 'Unknown Rod'
                     },
-                    'message': f'Caught something strange! P&L: {pnl_percent:+.1f}%'
+                    'message': f'Caught somTACing strange! P&L: {pnl_percent:+.1f}%'
                 })
                 
         except ValueError as e:
@@ -887,7 +895,7 @@ class WebAppServer:
             symbol = request.match_info['symbol'].upper()
             
             # Validate symbol
-            valid_symbols = ['ETH', 'BTC', 'SOL', 'ADA', 'MATIC', 'AVAX', 'LINK', 'DOT']
+            valid_symbols = ['TAC']
             if symbol not in valid_symbols:
                 return web.json_response({'error': f'Unsupported symbol: {symbol}'}, status=400)
             
@@ -1010,17 +1018,12 @@ def create_webapp(application=None):
 async def start_web_server(port: int = 8080, application=None):
     """Start the web server"""
     try:
-        logger.debug(f"Initializing web server on port {port}")
         webapp = create_webapp(application)
         runner = web.AppRunner(webapp)
         await runner.setup()
-        logger.debug("AppRunner setup completed")
         
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
-        logger.debug(f"TCPSite started on 0.0.0.0:{port}")
-        
-        logger.info(f"Web server successfully started on port {port}")
         return runner
         
     except Exception as e:

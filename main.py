@@ -43,7 +43,6 @@ else:
     logging.getLogger('aiohttp').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
-logger.info(f"Logging configured with level: {log_level} ({log_level_value})")
 
 # Global application instance for external access
 application = None
@@ -102,67 +101,74 @@ def create_application():
 
     return application
 
+async def price_cache_refresh_task():
+    """Background task to periodically refresh price cache"""
+    from src.utils.crypto_price import warm_up_price_cache
+
+    while True:
+        try:
+            await asyncio.sleep(300)  # Wait 5 minutes
+            cached_count = await warm_up_price_cache()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning(f"Error refreshing price cache: {e}")
+
+
 async def startup(application):
     """Initialize resources"""
-    logger.debug("Starting application startup sequence...")
-    logger.debug(f"Environment variables: PORT={os.environ.get('PORT', '8080')}, WEBAPP_URL={os.environ.get('WEBAPP_URL')}")
-    
     # Check if database reset is requested
     if os.environ.get('RESET_DATABASE') == '1':
         logger.warning("🚨 RESET_DATABASE=1 detected - dropping all tables!")
         await reset_database()
-        logger.info("✅ Database reset completed")
-    
-    logger.debug("Initializing database...")
     await init_database()
-    logger.info("✅ PostgreSQL database initialized")
-    
+
+    # Warm up price cache to reduce API calls at startup
+    try:
+        from src.utils.crypto_price import warm_up_price_cache
+        cached_count = await warm_up_price_cache()
+    except Exception as e:
+        logger.warning(f"Failed to warm up price cache: {e}")
+
+    # Start background price cache refresh task
+    cache_refresh_task = asyncio.create_task(price_cache_refresh_task())
+    application.cache_refresh_task = cache_refresh_task
+
     # Start web server
     port = int(os.environ.get('PORT', 8080))
-    logger.debug(f"Starting web server on port {port}...")
     web_runner = await start_web_server(port, application)
     application.web_runner = web_runner  # Store runner for cleanup
     logger.info(f"✅ Web server started on port {port}")
-    logger.debug("Application startup sequence completed")
 
 async def shutdown(application):
     """Clean up resources"""
-    logger.info("🧹 Cleaning up resources...")
-    logger.debug("Starting shutdown sequence...")
-    
+
+    # Cancel price cache refresh task if running
+    if hasattr(application, 'cache_refresh_task') and application.cache_refresh_task:
+        application.cache_refresh_task.cancel()
+        try:
+            await application.cache_refresh_task
+        except asyncio.CancelledError:
+            pass
+
     # Stop web server if running
     if hasattr(application, 'web_runner') and application.web_runner:
-        logger.debug("Stopping web server...")
         await application.web_runner.cleanup()
-        logger.info("✅ Web server stopped")
     else:
         logger.debug("No web server to stop")
-    
-    logger.debug("Closing database pool...")
     await close_pool()
-    logger.info("✅ Database pool closed")
-    logger.info("✅ Shutdown completed")
 
 def main():
     """Main entry point"""
     try:
-        logger.debug("Creating bot application...")
         # Create application
         global application
         application = create_application()
-        logger.debug("Bot application created")
         
         # Add startup and shutdown handlers
         application.post_init = startup
         application.post_shutdown = shutdown
-        
-        logger.info("🎣 Starting Fishing Bot with PostgreSQL...")
-        
-        # Run the bot - this handles all signals and shutdown gracefully
-        logger.debug("Starting bot polling...")
         application.run_polling(drop_pending_updates=True)
-        
-        logger.info("👋 Fishing Bot shut down gracefully")
         
     except KeyboardInterrupt:
         logger.info("👋 Received KeyboardInterrupt")

@@ -2,10 +2,9 @@
 /start and /help commands
 """
 
-import os
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Chat
+from telegram import Update, Chat
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
@@ -70,30 +69,36 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 # Fallback to regular start message
                 start_message = await get_full_start_message(user_id, username)
 
-        # Create web app button only if user should see it
-        webapp_url = os.environ.get('WEBAPP_URL')
+        # Show start message with CTA buttons using UI system
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
+        view = get_view_controller(context, user_id)
+
+        # Prepare buttons
+        buttons = [
+            ("🎣 Start Fishing", "quick_cast")
+        ]
+
+        # Add MiniApp button if available
+        web_app_buttons = []
         show_mini_app = await should_show_mini_app_button(user_id)
+        if show_mini_app:
+            web_app_buttons = get_miniapp_button()
 
-        if not webapp_url or not show_mini_app:
-            await update.message.reply_text(start_message, parse_mode='HTML')
-            return
-
-        try:
-            keyboard = [[
-                InlineKeyboardButton(
-                    "🎮 Open Miniapp",
-                    web_app=WebAppInfo(url=webapp_url)
-                )
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            logger.debug(f"Created keyboard with webapp URL: {webapp_url}")
-        except Exception as e:
-            logger.error(f"Error creating WebApp button: {e}")
-            await update.message.reply_text(start_message, parse_mode='HTML')
-            return
-
-        logger.debug(f"Sending start message with webapp button to user {user_id}")
-        await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
+        logger.debug(f"Sending start message with CTA block to user {user_id}")
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=BlockData(
+                header="",  # Header is in start_message
+                body=start_message,
+                buttons=buttons,
+                web_app_buttons=web_app_buttons,
+                footer="Pro tip: Commands work too - /cast, /hook, /help"
+            ),
+            clear_previous=False
+        )
         logger.debug(f"Successfully sent start message to user {user_id}")
 
     except Exception as e:
@@ -103,12 +108,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command - always show full game guide regardless of inheritance status"""
+    """Handle /help command - show game guide with CTA buttons"""
     user_id = update.effective_user.id
-    username = update.effective_user.username or update.effective_user.first_name
     chat = update.effective_chat
 
-    logger.debug(f"HELP command called by user {user_id} ({username})")
+    logger.debug(f"HELP command called by user {user_id}")
 
     # Ignore in group chats
     if chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
@@ -117,7 +121,33 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         # Get dynamic help text from database
         help_text = await get_help_text()
-        await safe_reply(update, help_text)
+
+        # Show help with CTA buttons using UI system
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
+        view = get_view_controller(context, user_id)
+
+        # Prepare buttons
+        buttons = [
+            ("🎣 Start Fishing", "quick_cast")
+        ]
+
+        # Add MiniApp button if available
+        web_app_buttons = get_miniapp_button()
+
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=BlockData(
+                header="",  # Header is in help_text
+                body=help_text,
+                buttons=buttons,
+                web_app_buttons=web_app_buttons,
+                footer="Commands: /cast, /hook, /status, /leaderboard"
+            ),
+            clear_previous=False
+        )
 
     except Exception as e:
         logger.error(f"Error in help command for user {user_id}: {e}")
@@ -193,7 +223,7 @@ async def pnl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def skip_onboarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /skip command - skip onboarding tutorial"""
+    """Handle /skip command - skip onboarding tutorial with success CTA"""
     from src.bot.features.onboarding import skip_onboarding
 
     user_id = update.effective_user.id
@@ -205,7 +235,27 @@ async def skip_onboarding_command(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         await skip_onboarding(user_id)
-        await safe_reply(update, "✅ Onboarding skipped! Use /start to see full game guide.")
+
+        # Show success CTA block with action buttons
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import build_success_block, CTABlock
+
+        view = get_view_controller(context, user_id)
+        data = build_success_block(
+            header="✅ Onboarding Skipped!",
+            body="You're all set! Ready to start fishing?",
+            primary_action=("🎣 Start Fishing", "quick_cast"),
+            secondary_action=("📖 Help", "quick_help"),
+            footer="Use /cast command anytime to start fishing"
+        )
+
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=CTABlock,
+            data=data,
+            clear_previous=False
+        )
+
     except Exception as e:
         logger.error(f"Error skipping onboarding: {e}")
         await safe_reply(update, "❌ Error skipping onboarding!")

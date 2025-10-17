@@ -13,8 +13,10 @@ from src.database.db_manager import (
     get_suitable_fish, check_rate_limit, check_hook_rate_limit,
     can_use_guaranteed_hook, should_get_special_catch, mark_onboarding_action
 )
-from src.utils.crypto_price import (
-    get_crypto_price, calculate_pnl, format_time_fishing, get_price_error_message
+from src.utils.crypto_price import get_crypto_price, get_price_error_message
+from src.utils.fishing_calculations import (
+    calculate_pnl_percent,
+    format_fishing_duration_from_entry
 )
 from src.bot.ui.formatters import format_fishing_complete_caption
 from src.bot.ui.messages import get_catch_story_from_db
@@ -77,22 +79,62 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         rod = await get_rod_by_id(position['rod_id']) if position['rod_id'] else None
 
         # Get base currency for price fetching
-        base_currency = pond['base_currency'] if pond else 'ETH'
+        base_currency = pond['base_currency'] if pond else 'TAC'
         leverage = rod['leverage'] if rod else 1.5
         entry_price = position['entry_price']
+        entry_time = position['entry_time']
 
-        # Calculate fishing time for later use
-        time_fishing = format_time_fishing(position['entry_time'])
+        # Calculate fishing time for later use (centralized UTC-aware calculation)
+        time_fishing = format_fishing_duration_from_entry(entry_time)
 
-        # QUICK FISHING CHECK - temporarily disabled
-        # should_block, quick_message = await check_quick_fishing(position, base_currency, entry_price, leverage)
-        # if should_block:
-        #     await safe_reply(update, quick_message)
-        #     return
+        logger.info(
+            f"Hook initiated: user={user_id}, position_id={position['id']}, "
+            f"entry_price={entry_price:.2f}, entry_time={entry_time}, "
+            f"time_fishing={time_fishing}, leverage={leverage}x, currency={base_currency}"
+        )
+
+        # QUICK FISHING CHECK - show ErrorBlock to avoid breaking UI
+        should_block, quick_message_html = await check_quick_fishing(position, base_currency, entry_price, leverage)
+        if should_block:
+            # Show ErrorBlock with action buttons (consistent with UI system)
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+            from src.utils.crypto_price import get_fishing_time_seconds
+
+            view = get_view_controller(context, user_id)
+            fishing_time_seconds = get_fishing_time_seconds(entry_time)
+
+            # Get the funny message
+            from src.bot.ui.messages import get_quick_fishing_message
+            funny_message = get_quick_fishing_message(fishing_time_seconds)
+
+            # For callback queries, acknowledge the click first
+            if update.callback_query:
+                await update.callback_query.answer()
+
+            # Show ErrorBlock with helpful actions
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="⏰ Too Quick!",
+                    body=f"{funny_message}\n\n⏱ Time: {time_fishing}\n\nWait at least 1 minute for the market to move!",
+                    buttons=[
+                        ("📊 Check Status", "show_status"),
+                        ("🔄 Try Again", "quick_hook")
+                    ],
+                    footer="Patience is key in fishing 🎣"
+                )
+            )
+            return
 
         # Get user level
         user = await get_user(user_id)
         user_level = user['level'] if user else 1
+
+        # Acknowledge callback query if called from button (prevents "loading..." state)
+        if update.callback_query:
+            await update.callback_query.answer()
 
         # Transition to HOOKING state
         from src.bot.ui.state_machine import get_state_machine, UserState
@@ -126,10 +168,18 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         async def fetch_price_and_calculate():
             try:
                 current_price = await get_crypto_price(base_currency)
-                pnl_percent = calculate_pnl(entry_price, current_price, leverage)
+                # Use centralized PnL calculation with proper leverage handling
+                pnl_percent = calculate_pnl_percent(entry_price, current_price, leverage)
+
+                logger.info(
+                    f"Price fetched: user={user_id}, current_price={current_price:.2f}, "
+                    f"entry_price={entry_price:.2f}, leverage={leverage}x, "
+                    f"calculated_pnl={pnl_percent:.4f}%"
+                )
+
                 return current_price, pnl_percent
             except Exception as e:
-                logger.error(f"Price fetch failed in hook: {e}")
+                logger.error(f"Price fetch failed in hook for user {user_id}: {e}", exc_info=True)
                 return "ERROR", None
 
         price_task = asyncio.create_task(fetch_price_and_calculate())
@@ -168,9 +218,13 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if should_guarantee:
             # Override P&L for guaranteed good catch (2-5% positive)
             import random
+            original_pnl = pnl_percent
             pnl_percent = random.uniform(2.0, 5.0)
             await mark_onboarding_action(user_id, 'first_hook')
-            logger.info(f"Guaranteed good catch for user {user_id}: {pnl_percent}%")
+            logger.info(
+                f"Guaranteed good catch for user {user_id}: "
+                f"original_pnl={original_pnl:.4f}% → guaranteed_pnl={pnl_percent:.4f}%"
+            )
 
         # Normal fishing - proceed with fish selection and generation
         # The database-driven fish selection with weighted rarity system
@@ -197,7 +251,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 rod_name=rod['name'] if rod else 'Starter rod',
                 leverage=leverage,
                 pond_name=pond['name'] if pond else '🌊 Crypto Waters',
-                pond_pair=pond['trading_pair'] if pond else 'ETH/USDT',
+                pond_pair=pond['trading_pair'] if pond else 'TAC/USDT',
                 time_fishing=time_fishing,
                 entry_price=entry_price,
                 current_price=current_price,
@@ -210,7 +264,12 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 generate_fish_card_from_db(fish_data)
             )
 
-            # Close position with fish ID
+            # Close position with fish ID (log before saving to DB)
+            logger.info(
+                f"Closing position: position_id={position['id']}, user={user_id}, "
+                f"fish={fish_data['name']}, entry={entry_price:.2f}, exit={current_price:.2f}, "
+                f"pnl_percent={pnl_percent:.4f}%, leverage={leverage}x, time={time_fishing}"
+            )
             await close_position(position['id'], current_price, pnl_percent, fish_data['id'])
 
             # Wait for both animation and card generation to complete
@@ -242,16 +301,19 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     'card_image_bytes': card_image
                 }
 
-                # Show CTA with Share + MiniApp buttons
+                # Show CTA with Share + Cast Again + MiniApp buttons
                 await view.show_cta_block(
                     chat_id=user_id,
                     block_type=CTABlock,
                     data=BlockData(
                         header="🎉 Great Catch!",
-                        body=f"You caught {fish_data['emoji']} {fish_data['name']}! Share it with your group to get +1 BAIT token reward.",
-                        buttons=[("📢 Share in Group (🪱 +1 BAIT)", "share_hook")],
+                        body=f"You caught {fish_data['emoji']} {fish_data['name']}!",
+                        buttons=[
+                            ("📢 Share in Group (🪱 +1 BAIT)", "share_hook"),
+                            ("🎣 Cast Again (🪱 -1 BAIT)", "quick_cast")
+                        ],
                     web_app_buttons=get_miniapp_button(),
-                        footer="Sharing gives you your BAIT back!"
+                        footer="Share it with your group to get +1 BAIT token reward."
                     )
                 )
             else:
@@ -262,7 +324,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     data=BlockData(
                         header="🎉 Fish Caught!",
                         body=f"You caught {fish_data['emoji']} {fish_data['name']}! Ready for another catch?",
-                        buttons=[("🎣 Cast Again", "quick_cast")],
+                        buttons=[("🎣 Cast Again (🪱 -1 BAIT)", "quick_cast")],
                     web_app_buttons=get_miniapp_button()
                     )
                 )
@@ -272,7 +334,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete
-            await safe_reply(update, f"🎣 {username} caught something strange! P&L: {pnl_percent:+.1f}%")
+            await safe_reply(update, f"🎣 {username} caught somTACing strange! P&L: {pnl_percent:+.1f}%")
             await close_position(position['id'], current_price, pnl_percent, None)
 
         # Handle onboarding progression if applicable

@@ -51,7 +51,7 @@ function getUsernameFromTelegram() {
 async function apiRequest(endpoint, options = {}) {
     try {
         const defaultOptions = {
-            method: 'GET',
+            mTACod: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             }
@@ -62,7 +62,7 @@ async function apiRequest(endpoint, options = {}) {
         const url = `${baseUrl}/api${endpoint}`;
         
         if (appConfig.DEBUG) {
-            console.log('API Request:', options.method || 'GET', url);
+            console.log('API Request:', options.mTACod || 'GET', url);
         }
         
         const response = await fetch(url, {
@@ -203,7 +203,7 @@ async function setActiveRod(rodId) {
     try {
         const userId = getUserIdFromTelegram();
         await apiRequest(`/user/${userId}/active-rod`, {
-            method: 'POST',
+            mTACod: 'POST',
             body: JSON.stringify({ rod_id: rodId })
         });
         
@@ -936,10 +936,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('prev-rod-btn').addEventListener('click', selectPreviousRod);
     document.getElementById('next-rod-btn').addEventListener('click', selectNextRod);
     document.getElementById('rod-action-btn').addEventListener('click', handleRodAction);
-    
-    // Inheritance screen
-    document.getElementById('accept-inheritance-btn').addEventListener('click', claimInheritance);
-    
+
     // Обработчики для динамически создаваемых элементов
     document.addEventListener('click', function(e) {
         // Карточки рыб
@@ -1113,7 +1110,7 @@ async function purchaseProduct(productId) {
         
         // Create purchase invoice
         const response = await apiRequest(`/user/${userId}/purchase`, {
-            method: 'POST',
+            mTACod: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -1159,65 +1156,8 @@ function showInfo(message) {
 // Remove duplicate showError function - use the one already defined above
 
 // === APP INITIALIZATION ===
-async function checkInheritanceStatus() {
-    try {
-        const userId = getUserIdFromTelegram();
-        const status = await apiRequest(`/user/${userId}/inheritance-status`);
-        return status.inheritance_claimed;
-    } catch (error) {
-        console.error('Failed to check inheritance status:', error);
-        return true; // Default to true to avoid showing inheritance screen on error
-    }
-}
-
-async function claimInheritance() {
-    try {
-        const userId = getUserIdFromTelegram();
-        const acceptBtn = document.getElementById('accept-inheritance-btn');
-        
-        // Disable button during request
-        acceptBtn.disabled = true;
-        acceptBtn.textContent = '⏳ Принимаем наследство...';
-        
-        const result = await apiRequest(`/user/${userId}/claim-inheritance`, {
-            method: 'POST'
-        });
-        
-        if (result.success) {
-            // Show success animation
-            acceptBtn.textContent = '🎉 Наследство получено!';
-            acceptBtn.style.background = 'linear-gradient(135deg, #32CD32 0%, #228B22 100%)';
-            
-            // Wait a bit to show success state
-            setTimeout(() => {
-                // Reload user data and switch to lobby
-                loadUserData();
-                showScreen('lobby');
-            }, 2000);
-        } else {
-            throw new Error(result.error || 'Failed to claim inheritance');
-        }
-    } catch (error) {
-        console.error('Failed to claim inheritance:', error);
-        const acceptBtn = document.getElementById('accept-inheritance-btn');
-        acceptBtn.disabled = false;
-        acceptBtn.textContent = '🎁 Принять наследство';
-        showError('Не удалось получить наследство. Попробуйте снова.');
-    }
-}
-
 async function initializeApp() {
     try {
-        // First check if user needs to see inheritance screen
-        const inheritanceClaimed = await checkInheritanceStatus();
-        
-        if (!inheritanceClaimed) {
-            // Show inheritance screen instead of lobby
-            showScreen('inheritance');
-            return;
-        }
-        
-        // Normal initialization for users who have claimed inheritance
         // Загружаем данные пользователя, активную удочку, позицию и продукты параллельно
         // updateCharacterVisual() вызывается автоматически в loadActiveRod()
         // updateCastHookButton() вызывается автоматически в loadActivePosition()

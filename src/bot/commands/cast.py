@@ -178,14 +178,14 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 <b>🌊 To start fishing, you need to:</b>
 
 1. Add this bot to a Telegram group
-2. The group will automatically become a fishing pond for you and others
-3. Then you can /cast here or right in the group
+2. The group will automatically become a fishing pond
+3. Return here and use /cast to start fishing
 
 <b>🎮 Group Pond Benefits:</b>
-• Bigger groups = More trading pairs
 • Fish with friends socially
-• Group announcements when you catch fish
-• Group specific leaderboards and events
+• Share your catches to earn BAIT rewards
+• Group-specific leaderboards
+• Build your fishing community
 
 <i>Add me to a group to create your first pond!</i>"""
 
@@ -418,6 +418,9 @@ async def _start_cast_for_pond(
             if cast_reward_message:
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 context.user_data['pending_gear_reward'] = cast_reward_message
+                # Save flag to show CTA after gear claim
+                context.user_data['pending_cast_cta'] = True
+                context.user_data['is_first_cast'] = can_use_free
 
                 gear_keyboard = [[InlineKeyboardButton("🎣 Claim gear", callback_data="claim_gear_reward")]]
                 await context.bot.send_message(
@@ -434,8 +437,11 @@ async def _start_cast_for_pond(
                     data=BlockData(
                         header="✨ First Cast Complete!",
                         body="Your line is in the water. Wait for the right moment to maximize your catch!",
-                        buttons=[("📊 Check Status", "show_status")],
-                    web_app_buttons=get_miniapp_button(),
+                        buttons=[
+                            ("🪝 Hook Now", "quick_hook"),
+                            ("📊 Check Status", "show_status")
+                        ],
+                        web_app_buttons=get_miniapp_button(),
                         footer="Pro tip: Check market movement before hooking"
                     )
                 )
@@ -446,33 +452,15 @@ async def _start_cast_for_pond(
                     block_type=CTABlock,
                     data=BlockData(
                         header="🎣 Cast Complete!",
-                        body=f"Your line is ready at {pond['name']}. Watch the market and hook when ready!",
-                        buttons=[("📊 Check Status", "show_status")],
-                    web_app_buttons=get_miniapp_button(),
+                        body=f"Watch the market and hook when ready!",
+                        buttons=[
+                            ("🪝 Hook Now", "quick_hook"),
+                            ("📊 Check Status", "show_status")
+                        ],
+                        web_app_buttons=get_miniapp_button(),
                         footer="Timing is everything in fishing"
                     )
                 )
-
-        # # Share prompt for group ponds (same UX as hook command)
-        # if pond.get('pond_type') == 'group' and pond.get('chat_id'):
-        #     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-        #     context.user_data['share_cast_data'] = {
-        #         'pond_name': pond['name'],
-        #         'pond_chat_id': pond['chat_id'],
-        #         'username': username
-        #     }
-
-        #     share_button = InlineKeyboardMarkup(
-        #         [[InlineKeyboardButton("📢 Share in group", callback_data="share_cast")]]
-        #     )
-
-        #     await context.bot.send_message(
-        #         chat_id=user_id,
-        #         text="🎣 <b>Cast complete!</b> Want to share it with the group?",
-        #         reply_markup=share_button,
-        #         parse_mode='HTML'
-        #     )
 
         logger.info(f"User {username} started fishing in pond {pond_id}")
 

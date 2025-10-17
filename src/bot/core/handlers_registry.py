@@ -33,7 +33,8 @@ def register_all_handlers(application: Application) -> None:
     )
     from src.bot.features.quick_actions import (
         quick_cast_callback, quick_hook_callback, show_status_callback,
-        quick_buy_callback, cancel_action_callback
+        quick_buy_callback, cancel_action_callback, update_status_callback,
+        quick_pnl_callback, quick_help_callback
     )
 
     # Command handlers
@@ -73,7 +74,10 @@ def register_all_handlers(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(quick_cast_callback, pattern=r"^quick_cast$"))
     application.add_handler(CallbackQueryHandler(quick_hook_callback, pattern=r"^quick_hook$"))
     application.add_handler(CallbackQueryHandler(show_status_callback, pattern=r"^show_status$"))
+    application.add_handler(CallbackQueryHandler(update_status_callback, pattern=r"^update_status$"))
     application.add_handler(CallbackQueryHandler(quick_buy_callback, pattern=r"^quick_buy$"))
+    application.add_handler(CallbackQueryHandler(quick_pnl_callback, pattern=r"^quick_pnl$"))
+    application.add_handler(CallbackQueryHandler(quick_help_callback, pattern=r"^quick_help$"))
     application.add_handler(CallbackQueryHandler(cancel_action_callback, pattern=r"^cancel_action$"))
 
     # Onboarding callback handlers

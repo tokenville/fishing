@@ -4,6 +4,7 @@ Contains all static messages and dynamic text generation functions.
 """
 
 import random
+from src.bot.ui.formatters import format_price
 
 
 def get_cast_header(username, rod_name, pond_name, pond_pair, entry_price, leverage, user_level=1):
@@ -15,7 +16,7 @@ def get_cast_header(username, rod_name, pond_name, pond_pair, entry_price, lever
         f"🎣 <b>{safe_username}</b> is casting:\n\n"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
         f"Fishery: {pond_name} ({pond_pair})\n"
-        f"📈 Entry position: <b>${entry_price:.2f}</b>"
+        f"📈 Entry position: <b>${format_price(entry_price)}</b>"
     )
 
 
@@ -49,7 +50,7 @@ def get_hook_animated_sequence():
 def get_catch_story_from_db(fish_data):
     """Get simple catch story from database fish data"""
     if not fish_data:
-        return "🎣 You caught something!"
+        return "🎣 You caught somTACing!"
 
     # Handle both dict-like objects (asyncpg Record) and tuples (sqlite)
     if hasattr(fish_data, 'get'):

@@ -63,7 +63,8 @@ async def quick_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     try:
         query = update.callback_query
-        await query.answer()
+        # NOTE: Don't call query.answer() here - hook() will handle it
+        # This allows hook() to show custom messages (e.g., quick fishing error)
 
         # Import hook command
         from src.bot.commands.hook import hook
@@ -147,6 +148,105 @@ async def quick_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 await update.callback_query.edit_message_text(
                     "❌ <b>Error</b>\n\nCould not show store. Try /buy command.",
+                    parse_mode='HTML'
+                )
+            except Exception:
+                pass
+
+
+async def update_status_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle 'update_status' button press.
+
+    Refreshes the current status by calling /status command and updating the message.
+    Used for real-time P&L monitoring without creating new messages.
+
+    Button text: "🔄 Update Status"
+    """
+    try:
+        query = update.callback_query
+        await query.answer("Updating...")
+
+        # Import status command
+        from src.bot.commands.status import status
+
+        # Call existing status logic directly - it will handle message editing
+        await status(update, context)
+
+        logger.info(f"Status update triggered by user {update.effective_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error in update_status_callback: {e}")
+        logger.exception("Full update_status error:")
+        if update.callback_query:
+            try:
+                await update.callback_query.answer("❌ Update failed. Try /status")
+            except Exception:
+                pass
+
+
+async def quick_pnl_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle 'quick_pnl' button press.
+
+    Wrapper for /pnl command that works with inline buttons.
+    Shows user's virtual balance and leaderboard position.
+
+    Button text: "💰 My Balance" or "💰 Balance"
+    """
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        # Import pnl command
+        from src.bot.commands.start import pnl
+
+        # Call existing pnl logic directly
+        await pnl(update, context)
+
+        logger.info(f"Quick PnL triggered by user {update.effective_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error in quick_pnl_callback: {e}")
+        logger.exception("Full quick_pnl error:")
+        if update.callback_query:
+            try:
+                await update.callback_query.edit_message_text(
+                    "❌ <b>Error</b>\n\nCould not show balance. Try /pnl command.",
+                    parse_mode='HTML'
+                )
+            except Exception:
+                pass
+
+
+async def quick_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle 'quick_help' button press.
+
+    Wrapper for /help command that works with inline buttons.
+    Shows game help and guide.
+
+    Button text: "📖 Help" or "❓ How to Play"
+    """
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        # Import help command
+        from src.bot.commands.start import help_command
+
+        # Call existing help logic directly
+        await help_command(update, context)
+
+        logger.info(f"Quick help triggered by user {update.effective_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error in quick_help_callback: {e}")
+        logger.exception("Full quick_help error:")
+        if update.callback_query:
+            try:
+                await update.callback_query.edit_message_text(
+                    "❌ <b>Error</b>\n\nCould not show help. Try /help command.",
                     parse_mode='HTML'
                 )
             except Exception:

@@ -3,21 +3,56 @@ Formatting functions for fishing bot UI.
 Contains functions to format fishing data for display.
 """
 
+from src.utils.fishing_calculations import (
+    calculate_pnl_dollars,
+    format_fishing_duration_from_entry
+)
+
 
 def escape_markdown(text):
     """Simply return text without escaping - we'll use plain text mode"""
     return text if text else ""
 
 
+def format_price(price: float) -> str:
+    """
+    Format price with dynamic precision based on magnitude.
+
+    Handles everything from BTC (~$97,000) to meme coins (~$0.00002).
+
+    Examples:
+        $97,234.56 → "$97234.56" (BTC)
+        $3,645.12 → "$3645.12" (ETH)
+        $1.234 → "$1.234" (ADA, MATIC)
+        $0.3456 → "$0.3456" (DOGE)
+        $0.00002345 → "$0.00002345" (SHIB, PEPE)
+    """
+    if price >= 10:
+        return f"{price:.2f}"
+    elif price >= 1:
+        return f"{price:.3f}"
+    elif price >= 0.01:
+        return f"{price:.4f}"
+    elif price >= 0.0001:
+        return f"{price:.6f}"
+    else:
+        # For very small prices, show up to 8 significant digits
+        return f"{price:.8f}".rstrip('0').rstrip('.')
+
+
 def format_fishing_complete_caption(username, catch_story, rod_name, leverage, pond_name, pond_pair, time_fishing, entry_price, current_price, pnl_percent, user_level=1):
-    """Format fishing complete photo caption with new structured format"""
+    """
+    Format fishing complete photo caption with new structured format.
+
+    NOTE: time_fishing should be pre-formatted string (e.g., "5мин 30с")
+    For raw entry_time, use format_fishing_duration_from_entry() first.
+    """
     safe_username = username if username else "Angler"
     pnl_color = "🟢" if pnl_percent >= 0 else "🔴"
 
-    # Calculate dollar P&L based on user level
-    from src.utils.crypto_price import calculate_dollar_pnl
+    # Calculate dollar P&L based on user level using centralized helper
     stake_amount = user_level * 1000
-    dollar_pnl = calculate_dollar_pnl(entry_price, current_price, leverage, stake_amount)
+    dollar_pnl = calculate_pnl_dollars(entry_price, current_price, leverage, stake_amount)
 
     # Format PnL with dynamic precision
     if abs(pnl_percent) < 0.01:
@@ -46,19 +81,23 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
         f"Fishery: {pond_name} ({pond_pair})\n"
         f"Fishing time: <b>{time_fishing}</b>\n"
-        f"Position: ${entry_price:.2f} → ${current_price:.2f}"
+        f"Position: ${format_price(entry_price)} → ${format_price(current_price)}"
     )
 
 
 def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, leverage, entry_price, current_price, current_pnl, time_fishing, user_level=1):
-    """Format enhanced status command message with precise PnL and dollar amounts"""
+    """
+    Format enhanced status command message with precise PnL and dollar amounts.
+
+    NOTE: time_fishing should be pre-formatted string (e.g., "5мин 30с")
+    For raw entry_time, use format_fishing_duration_from_entry() first.
+    """
     safe_username = escape_markdown(username) if username else "Angler"
     pnl_color = "🟢" if current_pnl >= 0 else "🔴"
 
-    # Calculate dollar P&L based on user level
-    from src.utils.crypto_price import calculate_dollar_pnl
+    # Calculate dollar P&L based on user level using centralized helper
     stake_amount = user_level * 1000
-    dollar_pnl = calculate_dollar_pnl(entry_price, current_price, leverage, stake_amount)
+    dollar_pnl = calculate_pnl_dollars(entry_price, current_price, leverage, stake_amount)
 
     # Format PnL with dynamic precision (more decimal places for small changes)
     if abs(current_pnl) < 0.01:
@@ -86,7 +125,7 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
         f"Fishery: {pond_name} ({pond_pair})\n"
         f"⏱ Fishing time: <b>{time_fishing}</b>\n"
-        f"📈 Position: ${entry_price:.2f} → <b>${current_price:.2f}</b>\n"
+        f"📈 Position: ${format_price(entry_price)} → <b>${format_price(current_price)}</b>\n"
         f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})</b>"
     )
 
@@ -175,50 +214,32 @@ def format_new_user_status(username):
 
 async def get_full_start_message(user_id: int, username: str) -> str:
     """Build the complete start message for users who have claimed inheritance"""
-    from src.database.db_manager import (
-        get_user, get_active_position, get_user_rods, get_user_group_ponds
-    )
+    from src.database.db_manager import get_user
 
     try:
         # Get user statistics
         user = await get_user(user_id)
-        user_level = user['level'] if user else 1
         bait_tokens = user['bait_tokens'] if user else 10
-        experience = user['experience'] if user else 0
 
-        # Check if user is currently fishing
-        active_position = await get_active_position(user_id)
+        # Create personalized start message (commands removed - available via buttons)
+        start_message = f"""<b>🎣 Welcome to Hooked, {username}!</b>
 
-        # Get user's available equipment count
-        user_rods = await get_user_rods(user_id)
-        user_group_ponds = await get_user_group_ponds(user_id)
-        rods_count = len(user_rods) if user_rods else 0
-        ponds_count = len(user_group_ponds) if user_group_ponds else 0
-
-        # Create personalized start message
-        status_emoji = "🎣" if active_position else "🌊"
-        fishing_status = "Currently fishing!" if active_position else "Ready to fish"
-
-        start_message = f"""<b>🎣 Welcome to Hooked Crypto, {username}!</b>
 Make leveraged trades and catch fish based on your performance - from trash catches to legendary sea monsters!
 
 <b>🎮 How it works:</b>
-- Add bot to any group to create fishing pond
-- Cast line = open real trading position
-- Watch prices like waiting for fish bite
-- Close trade = discover your catch!
+• Add bot to any group to create fishing pond
+• Cast line = open real trading position
+• Watch prices like waiting for fish bite
+• Close trade = discover your catch!
 
-<b>🎣 Quick Commands:</b>
-- /cast - Start fishing (make trade)
-- /hook - Close position & see catch
-- /leaderboard - Top fishermen
-- /help - This guide
+<b>💼 Your Status:</b>
+🪱 BAIT tokens: <b>{bait_tokens}</b>
 
-<i>Each cast costs 1 $BAIT token!</i>"""
+<i>Each cast costs 1 BAIT token!</i>"""
 
         return start_message
 
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Error building full start message for user {user_id}: {e}")
-        return f"<b>🎣 Welcome to Hooked Crypto, {username}!</b>\n\nUse /help for game guide."
+        return f"<b>🎣 Welcome to Hooked, {username}!</b>\n\nReady to start fishing?"

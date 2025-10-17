@@ -430,13 +430,13 @@ async def init_database():
             )
         except Exception:
             pass
-        
+
         # Insert default data
-        await _insert_default_ponds(conn)
+        # Note: Ponds are now created dynamically when bot is added to groups
         await _insert_default_rods(conn)
         await _insert_default_fish(conn)
         await _insert_default_products(conn)
-        
+
     print("Database initialized successfully!")
 
 async def get_user(telegram_id: int) -> Optional[asyncpg.Record]:
@@ -477,8 +477,8 @@ async def create_position(telegram_id: int, entry_price: float):
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute('''
-            INSERT INTO positions (user_id, entry_price)
-            VALUES ($1, $2)
+            INSERT INTO positions (user_id, entry_price, entry_time)
+            VALUES ($1, $2, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
         ''', telegram_id, entry_price)
     print(f"Created position for user {telegram_id} at price {entry_price}")
 
@@ -487,8 +487,8 @@ async def close_position(position_id: int, exit_price: float, pnl_percent: float
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute('''
-            UPDATE positions 
-            SET status = 'closed', exit_price = $1, exit_time = CURRENT_TIMESTAMP,
+            UPDATE positions
+            SET status = 'closed', exit_price = $1, exit_time = CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
                 pnl_percent = $2, fish_caught_id = $3
             WHERE id = $4
         ''', exit_price, pnl_percent, fish_caught_id, position_id)
@@ -515,26 +515,7 @@ async def add_bait_tokens(telegram_id: int, amount: int) -> bool:
         ''', amount, telegram_id)
         return result.split()[-1] != '0'
 
-async def _insert_default_ponds(conn: asyncpg.Connection):
-    """Insert default ponds if they don't exist"""
-    count = await conn.fetchval('SELECT COUNT(*) FROM ponds')
-    if count == 0:
-        ponds_data = [
-            ('🌙 Moon River', 'ETH/USDT', 'ETH', 'USDT', None, 0, True),  # Special onboarding pond
-            ('🌊 Криптовые Воды', 'ETH/USDT', 'ETH', 'USDT', None, 1, True),
-            ('💰 Озеро Профита', 'BTC/USDT', 'BTC', 'USDT', None, 2, True),
-            ('⚡ Море Волатильности', 'SOL/USDT', 'SOL', 'USDT', None, 3, True),
-            ('🌙 Лунные Пруды', 'ADA/USDT', 'ADA', 'USDT', None, 4, True),
-            ('🔥 Вулканические Источники', 'MATIC/USDT', 'MATIC', 'USDT', None, 5, True),
-            ('❄️ Ледяные Глубины', 'AVAX/USDT', 'AVAX', 'USDT', None, 6, True),
-            ('🌈 Радужные Заводи', 'LINK/USDT', 'LINK', 'USDT', None, 7, True),
-            ('🏔️ Горные Озёра', 'DOT/USDT', 'DOT', 'USDT', None, 8, True)
-        ]
-        
-        await conn.executemany('''
-            INSERT INTO ponds (name, trading_pair, base_currency, quote_currency, image_url, required_level, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ''', ponds_data)
+# Note: Static ponds removed - all ponds are now created dynamically when bot is added to groups
 
 async def _insert_default_rods(conn: asyncpg.Connection):
     """Insert default rods if they don't exist"""
@@ -714,8 +695,8 @@ async def create_position_with_gear(telegram_id: int, pond_id: int, rod_id: int,
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute('''
-            INSERT INTO positions (user_id, pond_id, rod_id, entry_price)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO positions (user_id, pond_id, rod_id, entry_price, entry_time)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
         ''', telegram_id, pond_id, rod_id, entry_price)
     print(f"Created position for user {telegram_id} with pond {pond_id} and rod {rod_id}")
 
@@ -1299,24 +1280,19 @@ async def get_daily_leaderboard(user_id: Optional[int] = None):
 # === GROUP POND MANAGEMENT ===
 
 def get_pond_name_and_type(group_name: str, member_count: int) -> tuple:
-    """Generate pond name and available trading pair count based on group size"""
-    if member_count <= 5:
-        return f"🏞️ Creek {group_name}", 1  # 1 trading pair
-    elif member_count <= 15:
-        return f"🌊 Pond {group_name}", 2    # 2 trading pairs
-    elif member_count <= 30:
-        return f"💧 Lake {group_name}", 3   # 3 trading pairs
-    elif member_count <= 60:
-        return f"🌊 River {group_name}", 4    # 4 trading pairs
-    elif member_count <= 100:
-        return f"⛵ Sea {group_name}", 6    # 6 trading pairs
-    else:
-        return f"🌊 Ocean {group_name}", 8   # 8 trading pairs
+    """Generate pond name and available trading pair count
+
+    Currently returns just group name with 1 trading pair.
+    Future: scale trading pairs based on group size.
+    """
+    # For now, all ponds have 1 trading pair regardless of size
+    # Future expansion: unlock more pairs as groups grow
+    return group_name, 1
 
 def get_available_trading_pairs(pair_count: int) -> List[tuple]:
     """Get available trading pairs based on pond size"""
     all_pairs = [
-        ('ETH/USDT', 'ETH', 'USDT'),
+        ('TAC/USDT', 'TAC', 'USDT'),
         ('BTC/USDT', 'BTC', 'USDT'),
         ('SOL/USDT', 'SOL', 'USDT'),
         ('ADA/USDT', 'ADA', 'USDT'),
@@ -1353,7 +1329,7 @@ async def create_or_update_group_pond(chat_id: int, chat_title: str, chat_type: 
             return existing_pond['id']
         else:
             # Create new pond with primary trading pair (first one)
-            primary_pair = trading_pairs[0] if trading_pairs else ('ETH/USDT', 'ETH', 'USDT')
+            primary_pair = trading_pairs[0] if trading_pairs else ('TAC/USDT', 'TAC', 'USDT')
             
             result = await conn.fetchrow('''
                 INSERT INTO ponds (name, trading_pair, base_currency, quote_currency, 
@@ -1429,17 +1405,14 @@ async def update_group_member_count(chat_id: int, member_count: int):
         ''', chat_id)
         
         if pond:
-            # Generate new name based on updated member count
-            chat_title = pond['name'].split(' ', 2)[-1]  # Extract original group name
-            new_name, _ = get_pond_name_and_type(chat_title, member_count)
-            
+            # Pond name stays the same (just the group name), only update member count
             await conn.execute('''
-                UPDATE ponds 
-                SET name = $1, member_count = $2
-                WHERE chat_id = $3 AND pond_type = 'group'
-            ''', new_name, member_count, chat_id)
-            
-            logger.info(f"Updated group pond member count: {new_name} ({member_count} members)")
+                UPDATE ponds
+                SET member_count = $1
+                WHERE chat_id = $2 AND pond_type = 'group'
+            ''', member_count, chat_id)
+
+            logger.info(f"Updated group pond member count: {pond['name']} ({member_count} members)")
 
 # === PAYMENTS & TRANSACTIONS SYSTEM ===
 

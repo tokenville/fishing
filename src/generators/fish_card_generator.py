@@ -329,7 +329,7 @@ class SimpleFishGenerator:
         draw.text((8, overlay_y + 25), f"{pnl_text} • {time_fishing}", fill=pnl_color, font=small_font)
 
 class FishPromptManager:
-    """Manager for fish AI prompts with convenient methods"""
+    """Manager for fish AI prompts with convenient mTACods"""
     
     def __init__(self):
         pass

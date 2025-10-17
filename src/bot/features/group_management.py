@@ -47,24 +47,17 @@ async def my_chat_member_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
             
             # Send welcome message to the group
-            from src.database.db_manager import get_pond_name_and_type
-            pond_name, pair_count = get_pond_name_and_type(chat.title or f"Group {chat.id}", member_count)
-            
+            pond_name = chat.title or f"Group {chat.id}"
+
             welcome_msg = f"""🎣 <b>Fishing Bot Added!</b>
 
 🌊 <b>New Pond Created:</b> {pond_name}
 👥 <b>Members:</b> {member_count}
-💰 <b>Available Trading Pairs:</b> {pair_count}
 
-<b>🎮 How to Fish:</b>
-• Use /cast to throw your fishing rod
-• Use /hook to catch the fish
-• Use /status to check your progress
-• Use /leaderboard to check group stats
-• DM bot for more controls
+DM this bot and finish short tutorial to claim your welcome bonus!
 
-<i>The more members in your group, the more trading pairs become available!</i>"""
-            
+<i>Invite more friends to grow your fishing community!</i>"""
+
             await safe_send_message(context, chat.id, welcome_msg)
             
         # Bot was removed from the group
@@ -271,23 +264,20 @@ async def join_fishing_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Update the group message with new joined count
         # For now, use a simple count - this can be enhanced later
         joined_count = "many"
-
-        # Get pond info for updating the message
-        pond_name, pair_count = get_pond_name_and_type(group_pond['name'], group_pond.get('member_count', 2))
+        pond_name = group_pond['name']
 
         # Update the welcome message with new count
-        updated_msg = f"""🎣 <b>Welcome to Hooked Crypto Fishing!</b>
+        updated_msg = f"""🎣 <b>Welcome, crypto hookers!</b>
 
 🌊 <b>Pond:</b> {pond_name}
 👥 <b>Group Members:</b> {group_pond.get('member_count', 2)}
-💰 <b>Trading Pairs:</b> {pair_count}
 🎯 <b>Joined:</b> {joined_count}
 
 <b>🎮 How it works:</b>
 • Click "Join Fishing" below to connect this pond
-• Fish using /cast in any group with the bot
-• All catches happen in private chat with full animations
-• Results are announced here for everyone to see
+• Fish using /cast in private chat with the bot
+• All catches happen in private with full animations
+• Share your catches with the group to earn rewards
 
 <b>📊 Group Commands:</b> /leaderboard
 

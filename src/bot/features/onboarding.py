@@ -144,8 +144,8 @@ class OnboardingHandler:
         self, user_id: int, **_: Dict[str, str]
     ) -> Tuple[str, List[List[InlineKeyboardButton]]]:
         message = (
-            "🎣 Welcome to the degen fishing simulator.\n"
-            "Here you scalp crypto by catching fish JPEGs.\n"
+            "🎣 Welcome to Hooked, the fishing skin for perpetual trading.\n\n"
+            "Skip the charts. Scalp crypto by catching fish JPEGs.\n\n"
             "Learn the mechanics in 3 steps:\n"
             "• Cast = open a position\n"
             "• Telegram group = your trading pond\n"
@@ -482,6 +482,52 @@ async def claim_gear_reward_callback(update: Update, context: ContextTypes.DEFAU
                 # Clear pending onboarding data
                 context.user_data.pop('pending_onboarding_message', None)
                 context.user_data.pop('pending_onboarding_markup', None)
+            elif context.user_data.get('pending_cast_cta'):
+                # User is not in onboarding - show cast completion CTA
+                await asyncio.sleep(1)
+
+                from src.bot.ui.view_controller import get_view_controller
+                from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
+                view = get_view_controller(context, user_id)
+                is_first_cast = context.user_data.get('is_first_cast', False)
+
+                if is_first_cast:
+                    # First cast CTA
+                    await view.show_cta_block(
+                        chat_id=user_id,
+                        block_type=CTABlock,
+                        data=BlockData(
+                            header="✨ First Cast Complete!",
+                            body="Your line is in the water. Wait for the right moment to maximize your catch!",
+                            buttons=[
+                                ("🪝 Hook Now", "quick_hook"),
+                                ("📊 Check Status", "show_status")
+                            ],
+                            web_app_buttons=get_miniapp_button(),
+                            footer="Pro tip: Check market movement before hooking"
+                        )
+                    )
+                else:
+                    # Regular cast CTA
+                    await view.show_cta_block(
+                        chat_id=user_id,
+                        block_type=CTABlock,
+                        data=BlockData(
+                            header="🎣 Cast Complete!",
+                            body="Watch the market and hook when ready!",
+                            buttons=[
+                                ("🪝 Hook Now", "quick_hook"),
+                                ("📊 Check Status", "show_status")
+                            ],
+                            web_app_buttons=get_miniapp_button(),
+                            footer="Timing is everything in fishing"
+                        )
+                    )
+
+                # Clear pending cast CTA flags
+                context.user_data.pop('pending_cast_cta', None)
+                context.user_data.pop('is_first_cast', None)
         else:
             await query.answer("🎣 Gear already claimed!", show_alert=True)
     except Exception as exc:
