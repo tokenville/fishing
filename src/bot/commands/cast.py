@@ -179,7 +179,7 @@ async def cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 1. Add this bot to a Telegram group
 2. The group will automatically become a fishing pond
-3. Send /gofishing in your group to start fishing there.
+3. Send <code>/gofishing</code> in your group to start fishing there.
 
 <b>🎮 Group Pond Benefits:</b>
 • Fish with friends socially

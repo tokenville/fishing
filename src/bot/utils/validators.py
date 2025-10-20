@@ -41,7 +41,7 @@ async def validate_fishing_preconditions(user_id: int, username: str) -> Tuple[b
     # Check if user is already fishing
     active_position = await get_active_position(user_id)
     if active_position:
-        return False, f"🎣 {username} already has a fishing rod in the water! Use /hook to pull out the catch or /status to check progress."
+        return False, f"🎣 {username} already has a fishing rod in the water! Use <code>/hook</code> to pull out the catch or <code>/status</code> to check progress."
 
     return True, None
 
@@ -66,7 +66,7 @@ async def validate_hook_preconditions(user_id: int, username: str) -> Tuple[bool
     # Check if user is fishing
     position = await get_active_position(user_id)
     if not position:
-        return False, f"🎣 {username} is not fishing! Use /cast to throw the fishing rod.", None
+        return False, f"🎣 {username} is not fishing! Use <code>/cast</code> to throw the fishing rod.", None
 
     return True, None, position
 

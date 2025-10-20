@@ -129,16 +129,16 @@ async def get_help_text():
         # Build dynamic help text
         help_text = """🎣 <b>FISHING BOT COMMANDS:</b>
 
-/cast - Cast your rod (cost: 1 🪱 BAIT)
-/hook - Pull in your catch and see what you caught!
-/status - Check current fishing status
-/help - Show this message
+<code>/cast</code> - Cast your rod (cost: 1 🪱 BAIT)
+<code>/hook</code> - Pull in your catch and see what you caught!
+<code>/status</code> - Check current fishing status
+<code>/help</code> - Show this message
 
 <b>🎮 HOW TO PLAY:</b>
-1. Use /cast to start fishing
+1. Use <code>/cast</code> to start fishing
 2. Wait and watch the casting animation
-3. Use /status to check progress
-4. Use /hook when ready to complete position
+3. Use <code>/status</code> to check progress
+4. Use <code>/hook</code> when ready to complete position
 5. Get a fish card based on your result!
 
 <b>🐟 FISH COLLECTION:</b>"""
@@ -219,10 +219,10 @@ async def get_help_text():
         # Fallback to static text if database fails
         return """🎣 <b>FISHING BOT COMMANDS:</b>
 
-/cast - Cast your rod (cost: 1 🪱 BAIT)
-/hook - Pull in your catch and see what you caught!
-/status - Check current fishing status
-/help - Show this message
+<code>/cast</code> - Cast your rod (cost: 1 🪱 BAIT)
+<code>/hook</code> - Pull in your catch and see what you caught!
+<code>/status</code> - Check current fishing status
+<code>/help</code> - Show this message
 
 <i>⚠️ Fishing system temporarily unavailable for display.</i>
-🚀 Try /cast to start playing!"""
+🚀 Try <code>/cast</code> to start playing!"""

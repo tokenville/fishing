@@ -32,7 +32,7 @@ def get_group_welcome_message() -> str:
 
 The beta runs in demo-trading mode.
 
-<b>📊 Group Commands:</b> /leaderboard
+<b>📊 Group Commands:</b> <code>/leaderboard</code>
 
 <i>One click to start fishing! 🐟</i>"""
 
@@ -46,7 +46,7 @@ def get_pond_join_success_message(pond_name: str, trading_pair: str) -> str:
 
 <b>🎮 Ready to Fish!</b>
 
-<i>Start fishing now with /cast! 🐟</i>"""
+<i>Start fishing now with <code>/cast</code>! 🐟</i>"""
 
 async def show_already_member_cta(context: ContextTypes.DEFAULT_TYPE, user_id: int, pond_name: str, update: Update = None) -> None:
     """Show CTA block when user is already a member of the pond"""

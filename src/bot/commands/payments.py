@@ -269,7 +269,7 @@ async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYP
             await safe_reply(update, 
                 "📝 <b>Transaction History</b>\n\n"
                 "No transactions found.\n\n"
-                "<i>Use /buy to purchase BAIT tokens!</i>"
+                "<i>Use <code>/buy</code> to purchase BAIT tokens!</i>"
             )
             return
         
@@ -337,5 +337,5 @@ Get BAIT tokens instantly with Telegram Stars!
         
     except Exception as e:
         logger.error(f"Error in low BAIT purchase offer: {e}")
-        await safe_reply(update, "🎣 No $BAIT tokens! Use /buy to purchase more.")
+        await safe_reply(update, "🎣 No $BAIT tokens! Use <code>/buy</code> to purchase more.")
 

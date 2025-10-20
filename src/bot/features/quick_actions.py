@@ -45,7 +45,7 @@ async def quick_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not start fishing. Try /cast command.",
+                    "❌ <b>Error</b>\n\nCould not start fishing. Try <code>/cast</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -80,7 +80,7 @@ async def quick_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not hook. Try /hook command.",
+                    "❌ <b>Error</b>\n\nCould not hook. Try <code>/hook</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -114,7 +114,7 @@ async def show_status_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not show status. Try /status command.",
+                    "❌ <b>Error</b>\n\nCould not show status. Try <code>/status</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -147,7 +147,7 @@ async def quick_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not show store. Try /buy command.",
+                    "❌ <b>Error</b>\n\nCould not show store. Try <code>/buy</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -212,7 +212,7 @@ async def quick_pnl_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not show balance. Try /pnl command.",
+                    "❌ <b>Error</b>\n\nCould not show balance. Try <code>/pnl</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -246,7 +246,7 @@ async def quick_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if update.callback_query:
             try:
                 await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\nCould not show help. Try /help command.",
+                    "❌ <b>Error</b>\n\nCould not show help. Try <code>/help</code> command.",
                     parse_mode='HTML'
                 )
             except Exception:

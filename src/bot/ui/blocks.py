@@ -381,7 +381,7 @@ def build_info_block(
         data = build_info_block(
             header="📊 Your Stats",
             body="Catches: 42\\nBalance: $12,500",
-            command_hint="Use /cast to continue fishing"
+            command_hint="Use <code>/cast</code> to continue fishing"
         )
     """
     return BlockData(

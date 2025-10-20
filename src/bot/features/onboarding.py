@@ -211,12 +211,12 @@ class OnboardingHandler:
     ) -> Tuple[str, List[List[InlineKeyboardButton]]]:
         message = (
             "🎯 <b>Step 2 of 3 — cast your rod</b>\n\n"
-            "1. Hit /cast or tap the button below.\n"
+            "1. Hit <code>/cast</code> or tap the button below.\n"
             "2. Pick your pond (group).\n"
             "3. Rod drops into water = position opens at current price.\n\n"
             "Each cast costs 1 BAIT token.\n\n"
             "Your first cast is free and unlocks starter rods: Long & Short with different leverage.\n\n"
-            "Track your open position anytime with /status."
+            "Track your open position anytime with <code>/status</code>."
         )
 
         keyboard = [
@@ -229,7 +229,7 @@ class OnboardingHandler:
     ) -> Tuple[str, List[List[InlineKeyboardButton]]]:
         message = (
             "⚡ <b>Step 3 of 3 — hook your catch</b>\n\n"
-            "Once your rod is in the water, /hook closes the position.\n"
+            "Once your rod is in the water, <code>/hook</code> closes the position.\n"
             "Higher PnL = rarer fish JPEG. Even losses give you collectible trash fish.\n\n"
             "Your rod determines leverage: Long for upside, Short for downside (more rods coming soon).\n\n"
             "First catch bonus: +$10,000 virtual balance to kickstart your leaderboard grind!"

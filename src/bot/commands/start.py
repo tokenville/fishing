@@ -135,7 +135,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error in start command for user {user_id}: {e}")
         logger.exception("Full start command error traceback:")
-        await safe_reply(update, "🎣 Welcome! Use /help for guide.")
+        await safe_reply(update, "🎣 Welcome! Use <code>/help</code> for guide.")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

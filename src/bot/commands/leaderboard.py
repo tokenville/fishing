@@ -92,7 +92,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         else:
             if is_group_chat:
                 message.append('No trades in this group yet')
-                message.append('<i>Use /cast to start fishing!</i>')
+                message.append('<i>Use <code>/cast</code> to start fishing!</i>')
             else:
                 message.append('No active players yet')
         
@@ -118,7 +118,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if is_group_chat:
             message.append('<i>This leaderboard shows only trades made in this group</i>')
         else:
-            message.append('<i>Use /leaderboard week for weekly rating</i>')
+            message.append('<i>Use <code>/leaderboard week</code> for weekly rating</i>')
         
         await update.message.reply_text(
             '\n'.join(message),
