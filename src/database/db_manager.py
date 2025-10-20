@@ -1856,6 +1856,35 @@ async def should_get_special_catch(user_id: int) -> Optional[str]:
 
     return None
 
+async def has_skipped_onboarding_without_rewards(user_id: int) -> bool:
+    """Check if user skipped onboarding without receiving group bonus (10 BAIT)
+
+    Returns:
+        True if user completed onboarding but never claimed group bonus
+    """
+    progress = await get_onboarding_progress(user_id)
+    if not progress:
+        return False
+
+    # User completed onboarding but never claimed the group bonus (10 BAIT)
+    return progress['completed'] and not progress['group_bonus_claimed']
+
+async def restart_onboarding_for_rewards(user_id: int):
+    """Restart onboarding at JOIN_GROUP step to allow claiming rewards
+
+    This allows users who skipped onboarding to go back and get their 10 BAIT tokens.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE onboarding_progress
+            SET completed = FALSE,
+                current_step = 'join_group',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1
+        ''', user_id)
+        logger.info(f"Restarted onboarding for user {user_id} at join_group step")
+
 async def migrate_user_balances() -> int:
     """Migrate existing users to new balance system
     Calculate balance from positions PnL and save to user_balances

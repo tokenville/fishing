@@ -29,7 +29,7 @@ def register_all_handlers(application: Application) -> None:
     from src.bot.features.onboarding import (
         onboarding_start_callback, onboarding_skip_callback, onboarding_claim_bonus_callback,
         claim_gear_reward_callback, onboarding_claim_reward_callback, onboarding_continue_cast_callback,
-        onboarding_send_cast_callback, onboarding_send_hook_callback
+        onboarding_send_cast_callback, onboarding_send_hook_callback, restart_onboarding_callback
     )
     from src.bot.features.quick_actions import (
         quick_cast_callback, quick_hook_callback, show_status_callback,
@@ -89,3 +89,4 @@ def register_all_handlers(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(onboarding_continue_cast_callback, pattern=r"^ob_continue_cast$"))
     application.add_handler(CallbackQueryHandler(onboarding_send_cast_callback, pattern=r"^ob_send_cast$"))
     application.add_handler(CallbackQueryHandler(onboarding_send_hook_callback, pattern=r"^ob_send_hook$"))
+    application.add_handler(CallbackQueryHandler(restart_onboarding_callback, pattern=r"^restart_onboarding$"))

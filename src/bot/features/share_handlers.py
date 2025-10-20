@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 from src.bot.random_messages import get_random_cast_appendix, get_random_hook_appendix
 from src.database.db_manager import add_bait_tokens
+from src.bot.ui.formatters import format_pnl_percent
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,29 @@ async def share_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Get stored cast data
         share_data = context.user_data.get('share_cast_data')
         if not share_data:
-            await query.edit_message_text(
-                "❌ <b>Share expired</b>\n\n<i>Cast data not found. Please cast again to share.</i>",
-                parse_mode='HTML'
+            # Delete old message and show error CTA
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Share Expired",
+                    body="Cast data not found. Please cast again to share.",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    footer="Share expires after some time for security"
+                )
             )
             return
 
@@ -60,10 +81,30 @@ async def share_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=reply_markup
             )
 
-            # Update button to show success
-            await query.edit_message_text(
-                "✅ <b>Shared successfully!</b>\n\n<i>Your cast has been posted to the group.</i>",
-                parse_mode='HTML'
+            # Delete old message and show success CTA
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show success CTA with Cast Again button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, CTABlock, get_miniapp_button
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=CTABlock,
+                data=BlockData(
+                    header="✅ Shared Successfully!",
+                    body="Your cast has been posted to the group!",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    web_app_buttons=get_miniapp_button(),
+                    footer="Keep fishing to catch more!"
+                )
             )
 
             # Clear stored data
@@ -71,21 +112,62 @@ async def share_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         except Exception as e:
             logger.error(f"Failed to share cast to group: {e}")
-            await query.edit_message_text(
-                "❌ <b>Share failed</b>\n\n<i>Could not post to group. Bot might not have permissions.</i>",
-                parse_mode='HTML'
+
+            # Delete old message and show error CTA
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Share Failed",
+                    body="Could not post to group. Bot might not have permissions.",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    footer="Check that bot is admin in the group"
+                )
             )
 
     except Exception as e:
         logger.error(f"Error in share_cast_callback: {e}")
         if update.callback_query:
+            # Delete old message and show error CTA
             try:
-                await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\n<i>Something went wrong. Try again.</i>",
-                    parse_mode='HTML'
+                await update.callback_query.delete_message()
+            except Exception:
+                try:
+                    await update.callback_query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            try:
+                from src.bot.ui.view_controller import get_view_controller
+                from src.bot.ui.blocks import BlockData, ErrorBlock
+
+                view = get_view_controller(context, user_id)
+                await view.show_cta_block(
+                    chat_id=user_id,
+                    block_type=ErrorBlock,
+                    data=BlockData(
+                        header="❌ Error",
+                        body="Something went wrong. Please try again.",
+                        buttons=[("🎣 Cast Again", "quick_cast")],
+                        footer="If error persists, contact support"
+                    )
                 )
-            except:
-                pass
+            except Exception as inner_e:
+                logger.error(f"Failed to show error CTA: {inner_e}")
 
 
 async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -99,9 +181,29 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Get stored hook data
         share_data = context.user_data.get('share_hook_data')
         if not share_data:
-            await query.edit_message_text(
-                "❌ <b>Share expired</b>\n\n<i>Catch data not found. Please hook again to share.</i>",
-                parse_mode='HTML'
+            # Delete old message and show error CTA
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Share Expired",
+                    body="Catch data not found. Please catch a fish again to share.",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    footer="Share expires after some time for security"
+                )
             )
             return
 
@@ -130,7 +232,8 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
             hook_appendix = get_random_hook_appendix()
-            group_notification = f"🎣 <b>{username}</b> caught {fish_emoji} {fish_name} from <b>{pond_name}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%{hook_appendix}"
+            pnl_str = format_pnl_percent(pnl_percent)
+            group_notification = f"🎣 <b>{username}</b> caught {fish_emoji} <b>{fish_name}</b> from {pond_name}! {pnl_color} P&L: <b>{pnl_str}</b>{hook_appendix}"
 
             if image_bytes:
                 await context.bot.send_photo(
@@ -195,18 +298,60 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         except Exception as e:
             logger.error(f"Failed to share hook to group: {e}")
-            await query.edit_message_text(
-                "❌ <b>Share failed</b>\n\n<i>Could not post to group. Bot might not have permissions.</i>",
-                parse_mode='HTML'
+
+            # Delete old message and show error CTA
+            try:
+                await query.delete_message()
+            except Exception:
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="❌ Share Failed",
+                    body="Could not post to group. Bot might not have permissions.",
+                    buttons=[("🎣 Cast Again", "quick_cast")],
+                    footer="Check that bot is admin in the group"
+                )
             )
 
     except Exception as e:
         logger.error(f"Error in share_hook_callback: {e}")
         if update.callback_query:
+            # Delete old message and show error CTA
             try:
-                await update.callback_query.edit_message_text(
-                    "❌ <b>Error</b>\n\n<i>Something went wrong. Try again.</i>",
-                    parse_mode='HTML'
+                await update.callback_query.delete_message()
+            except Exception:
+                try:
+                    await update.callback_query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            # Show error CTA with Cast Again button
+            try:
+                from src.bot.ui.view_controller import get_view_controller
+                from src.bot.ui.blocks import BlockData, ErrorBlock
+
+                user_id = update.effective_user.id
+                view = get_view_controller(context, user_id)
+                await view.show_cta_block(
+                    chat_id=user_id,
+                    block_type=ErrorBlock,
+                    data=BlockData(
+                        header="❌ Error",
+                        body="Something went wrong. Please try again.",
+                        buttons=[("🎣 Cast Again", "quick_cast")],
+                        footer="If error persists, contact support"
+                    )
                 )
-            except:
-                pass
+            except Exception as inner_e:
+                logger.error(f"Failed to show error CTA: {inner_e}")

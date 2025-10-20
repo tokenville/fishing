@@ -40,6 +40,28 @@ def format_price(price: float) -> str:
         return f"{price:.8f}".rstrip('0').rstrip('.')
 
 
+def format_pnl_percent(pnl_percent: float) -> str:
+    """
+    Format PnL percentage with dynamic precision.
+
+    Shows more decimal places for small changes to display meaningful values.
+
+    Examples:
+        0.0057% → "+0.0057%"
+        0.123% → "+0.123%"
+        0.85% → "+0.85%"
+        5.2% → "+5.2%"
+    """
+    if abs(pnl_percent) < 0.01:
+        return f"{pnl_percent:+.4f}%"
+    elif abs(pnl_percent) < 0.1:
+        return f"{pnl_percent:+.3f}%"
+    elif abs(pnl_percent) < 1:
+        return f"{pnl_percent:+.2f}%"
+    else:
+        return f"{pnl_percent:+.1f}%"
+
+
 def format_fishing_complete_caption(username, catch_story, rod_name, leverage, pond_name, pond_pair, time_fishing, entry_price, current_price, pnl_percent, user_level=1):
     """
     Format fishing complete photo caption with new structured format.
@@ -64,14 +86,7 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
         dollar_pnl = 0.0
 
     # Format PnL with dynamic precision
-    if abs(pnl_percent) < 0.01:
-        pnl_str = f"{pnl_percent:+.4f}%"
-    elif abs(pnl_percent) < 0.1:
-        pnl_str = f"{pnl_percent:+.3f}%"
-    elif abs(pnl_percent) < 1:
-        pnl_str = f"{pnl_percent:+.2f}%"
-    else:
-        pnl_str = f"{pnl_percent:+.1f}%"
+    pnl_str = format_pnl_percent(pnl_percent)
 
     # Format dollar amount with proper sign placement
     if abs(dollar_pnl) < 0.01:
@@ -118,14 +133,7 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
         dollar_pnl = 0.0
 
     # Format PnL with dynamic precision (more decimal places for small changes)
-    if abs(current_pnl) < 0.01:
-        pnl_str = f"{current_pnl:+.4f}%"
-    elif abs(current_pnl) < 0.1:
-        pnl_str = f"{current_pnl:+.3f}%"
-    elif abs(current_pnl) < 1:
-        pnl_str = f"{current_pnl:+.2f}%"
-    else:
-        pnl_str = f"{current_pnl:+.1f}%"
+    pnl_str = format_pnl_percent(current_pnl)
 
     # Format dollar amount with proper sign placement
     if abs(dollar_pnl) < 0.01:

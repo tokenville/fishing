@@ -666,3 +666,31 @@ async def onboarding_send_hook_callback(update: Update, context: ContextTypes.DE
     except Exception as exc:
         logger.error("Error in onboarding_send_hook_callback: %s", exc)
         await query.answer("❌ Failed to send command.", show_alert=True)
+
+
+async def restart_onboarding_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Restart onboarding to get BAIT rewards for users who skipped it."""
+    from src.database.db_manager import restart_onboarding_for_rewards
+
+    query = update.callback_query
+    try:
+        await query.answer()
+        user_id = update.effective_user.id
+
+        # Delete the no BAIT message
+        if query.message:
+            try:
+                await query.message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete no BAIT message: {del_err}")
+
+        # Restart onboarding at JOIN_GROUP step
+        await restart_onboarding_for_rewards(user_id)
+
+        # Show join group step
+        await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_JOIN_GROUP)
+
+        logger.info("User %s restarted onboarding to claim rewards", user_id)
+    except Exception as exc:
+        logger.error("Error in restart_onboarding_callback: %s", exc)
+        await query.answer("❌ Failed to restart tutorial. Try again.", show_alert=True)

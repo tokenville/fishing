@@ -302,25 +302,63 @@ async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def send_low_bait_purchase_offer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send purchase offer when user has no BAIT tokens"""
+    from src.database.db_manager import has_skipped_onboarding_without_rewards
+
     user_id = update.effective_user.id
-    
+
     try:
+        # Check if user skipped onboarding without getting rewards
+        skipped_without_rewards = await has_skipped_onboarding_without_rewards(user_id)
+
         # Get available products (quick options)
         products = await get_available_products()
         if not products:
-            await safe_reply(update, "🎣 No $BAIT tokens! You need BAIT tokens to go fishing.")
+            # Use ViewController to show error CTA
+            from src.bot.ui.view_controller import get_view_controller
+            from src.bot.ui.blocks import BlockData, ErrorBlock
+
+            view = get_view_controller(context, user_id)
+            await view.show_cta_block(
+                chat_id=user_id,
+                block_type=ErrorBlock,
+                data=BlockData(
+                    header="🪱 Out of BAIT Tokens!",
+                    body="You need BAIT tokens to go fishing, but the store is temporarily unavailable.",
+                    buttons=[("🎣 Try Fishing", "quick_cast")],
+                    footer="Use <code>/buy</code> command to check store availability"
+                )
+            )
             return
-        
+
         # Create purchase buttons for all products
         keyboard = []
+
+        # Add "Start Tutorial" button if user skipped onboarding
+        if skipped_without_rewards:
+            keyboard.append([InlineKeyboardButton("🎁 Start Tutorial - Get 10 FREE BAIT", callback_data="restart_onboarding")])
+
         for product in products:  # All 3 products
             button_text = f"🪱 Buy {product['bait_amount']} BAIT - ⭐{product['stars_price']}"
             callback_data = f"buy_bait_{product['id']}_1"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
-        
+
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        no_bait_message = """🎣 <b>Out of BAIT Tokens!</b>
+
+        # Update message if user skipped onboarding
+        if skipped_without_rewards:
+            no_bait_message = """🎣 <b>Out of BAIT Tokens!</b>
+
+You need BAIT tokens to go fishing. Each cast costs 1 BAIT token.
+
+🎁 <b>Get 10 FREE BAIT:</b>
+Start the tutorial to join the fishing group and claim your welcome bonus!
+
+🛒 <b>Or Purchase Instantly:</b>
+Get BAIT tokens with Telegram Stars!
+
+⭐ <i>Secure payment through Telegram</i>"""
+        else:
+            no_bait_message = """🎣 <b>Out of BAIT Tokens!</b>
 
 You need BAIT tokens to go fishing. Each cast costs 1 BAIT token.
 
@@ -328,14 +366,28 @@ You need BAIT tokens to go fishing. Each cast costs 1 BAIT token.
 Get BAIT tokens instantly with Telegram Stars!
 
 ⭐ <i>Secure payment through Telegram</i>"""
-        
+
         await update.message.reply_text(
             no_bait_message,
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-        
+
     except Exception as e:
         logger.error(f"Error in low BAIT purchase offer: {e}")
-        await safe_reply(update, "🎣 No $BAIT tokens! Use <code>/buy</code> to purchase more.")
+        # Use ViewController to show error CTA in exception case
+        from src.bot.ui.view_controller import get_view_controller
+        from src.bot.ui.blocks import BlockData, ErrorBlock
+
+        view = get_view_controller(context, user_id)
+        await view.show_cta_block(
+            chat_id=user_id,
+            block_type=ErrorBlock,
+            data=BlockData(
+                header="🪱 Out of BAIT Tokens!",
+                body="You need BAIT tokens to go fishing. There was an error loading the store.",
+                buttons=[("🎣 Try Again", "quick_cast")],
+                footer="Use <code>/buy</code> command to purchase more"
+            )
+        )
 
