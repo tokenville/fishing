@@ -73,7 +73,7 @@ async def show_already_member_cta(context: ContextTypes.DEFAULT_TYPE, user_id: i
             body=f"Ready to cast your line?",
             buttons=[("🎣 Cast Now", "quick_cast")],
             web_app_buttons=get_miniapp_button(),
-            footer="Tip: you can also use /cast command"
+            footer="Tip: you can also use <code>/cast</code> command"
         )
     )
 

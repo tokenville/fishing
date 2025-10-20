@@ -141,37 +141,41 @@ async def get_help_text():
 4. Use /hook when ready to complete position
 5. Get a fish card based on your result!
 
-<b>🐟 FISH TYPES:</b>"""
+<b>🐟 FISH COLLECTION:</b>"""
 
-        # Group fish by rarity
-        rarity_groups = {
-            'trash': [],
-            'common': [],
-            'rare': [],
-            'epic': [],
-            'legendary': []
+        # Group fish by rarity and count them
+        rarity_counts = {
+            'trash': 0,
+            'common': 0,
+            'rare': 0,
+            'epic': 0,
+            'legendary': 0
         }
 
-        special_fish = []
+        special_fish_count = 0
 
         for fish in fish_data:
-            emoji = fish['emoji']
-            name = fish['name']
             rarity = fish['rarity']
-            min_pnl = fish['min_pnl']
-            max_pnl = fish['max_pnl']
             required_ponds = fish['required_ponds']
             required_rods = fish['required_rods']
 
             # Check if it's a special fish (has requirements)
             if required_ponds or required_rods:
-                special_fish.append(fish)
+                special_fish_count += 1
             else:
                 # Regular fish grouped by rarity
-                if rarity in rarity_groups:
-                    rarity_groups[rarity].append(fish)
+                if rarity in rarity_counts:
+                    rarity_counts[rarity] += 1
 
-        # Add regular fish by rarity
+        # Add fish counts by rarity
+        rarity_emojis = {
+            'legendary': '💎',
+            'epic': '🔮',
+            'rare': '⭐',
+            'common': '🐟',
+            'trash': '🗑️'
+        }
+
         rarity_names = {
             'trash': 'Trash',
             'common': 'Common',
@@ -180,41 +184,19 @@ async def get_help_text():
             'legendary': 'Legendary'
         }
 
+        total_regular_fish = 0
         for rarity in ['legendary', 'epic', 'rare', 'common', 'trash']:
-            for fish in rarity_groups[rarity]:
-                emoji = fish['emoji']
-                name = fish['name']
-                min_pnl = fish['min_pnl']
-                max_pnl = fish['max_pnl']
-                pnl_desc = f"({min_pnl:+.0f}% to {max_pnl:+.0f}%)" if min_pnl != max_pnl else f"({min_pnl:+.0f}%)"
-                help_text += f"\n{emoji} {name} {pnl_desc} - {rarity_names[rarity]}"
+            count = rarity_counts[rarity]
+            if count > 0:
+                emoji = rarity_emojis[rarity]
+                total_regular_fish += count
+                help_text += f"\n{emoji} {rarity_names[rarity]}: {count} fish"
 
-        # Add special fish section if any exist
-        if special_fish:
-            help_text += "\n\n<b>🌟 SPECIAL FISH:</b>"
-            for fish in special_fish:
-                emoji = fish['emoji']
-                name = fish['name']
-                required_ponds = fish['required_ponds']
-                required_rods = fish['required_rods']
+        # Add special fish count if any exist
+        if special_fish_count > 0:
+            help_text += f"\n🌟 Special: {special_fish_count} fish (exclusive locations/rods)"
 
-                # Build requirement description
-                requirements = []
-                if required_ponds:
-                    # Get pond names for requirements
-                    pond_ids = required_ponds.split(',')
-                    pond_names = []
-                    for i, pond_data in enumerate(ponds_data):
-                        if str(i + 1) in pond_ids:
-                            pond_names.append(pond_data['name'])
-                    if pond_names:
-                        requirements.append(f"only {'/'.join(pond_names)}")
-
-                if required_rods:
-                    requirements.append("premium rods")
-
-                req_text = ", ".join(requirements) if requirements else "special conditions"
-                help_text += f"\n{emoji} {name} - {req_text}"
+        help_text += f"\n\n<i>📱 View full collection in Mini App!</i>"
 
         # Add dynamic system info
         help_text += f"\n\n<b>⚙️ SYSTEM:</b>"

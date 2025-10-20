@@ -126,7 +126,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 body=start_message,
                 buttons=buttons,
                 web_app_buttons=web_app_buttons,
-                footer="Pro tip: Commands work too - /cast, /hook, /help"
+                footer="Pro tip: Commands work too - <code>/cast</code>, <code>/hook</code>, <code>/help</code>"
             ),
             clear_previous=False
         )
@@ -175,7 +175,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 body=help_text,
                 buttons=buttons,
                 web_app_buttons=web_app_buttons,
-                footer="Commands: /cast, /hook, /status, /leaderboard"
+                footer="Commands: <code>/cast</code>, <code>/hook</code>, <code>/status</code>, <code>/leaderboard</code>"
             ),
             clear_previous=False
         )
@@ -277,7 +277,7 @@ async def skip_onboarding_command(update: Update, context: ContextTypes.DEFAULT_
             body="You're all set! Ready to start fishing?",
             primary_action=("🎣 Start Fishing", "quick_cast"),
             secondary_action=("📖 Help", "quick_help"),
-            footer="Use /cast command anytime to start fishing"
+            footer="Use <code>/cast</code> command anytime to start fishing"
         )
 
         await view.show_cta_block(

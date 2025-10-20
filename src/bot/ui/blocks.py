@@ -180,7 +180,7 @@ class InfoBlock(Block):
         data = BlockData(
             header="📊 Fishing Status",
             body="Rod: Long rod (2.0x)\\nPnL: +2.5%\\nTime: 5min 32s",
-            footer="Pro tip: Use /hook to complete your catch"
+            footer="Pro tip: Use <code>/hook</code> to complete your catch"
         )
         text, _ = InfoBlock.render(data)
 

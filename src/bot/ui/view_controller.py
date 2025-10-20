@@ -192,7 +192,7 @@ class ViewController:
                 data=BlockData(
                     header="📊 Status",
                     body="Current state info...",
-                    footer="Use /command for more"
+                    footer="Use <code>/command</code> for more"
                 )
             )
         """
