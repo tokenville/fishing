@@ -43,7 +43,7 @@ async def get_crypto_price(base_currency, use_cache=True):
 
     Args:
         base_currency: Currency symbol (e.g., 'TAC', 'BTC')
-        use_cache: WhTACer to use cached price (default: True)
+        use_cache: Whether to use cached price (default: True)
 
     Returns:
         Current price in USD

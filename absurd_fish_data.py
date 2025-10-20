@@ -43,7 +43,7 @@ ABSURD_FISH_DATA = [
     {
         "name": "Expired Coupon",
         "emoji": "🎫",
-        "description": "20% off somTACing you never wanted anyway",
+        "description": "20% off something you never wanted anyway",
         "min_pnl": -30.0,
         "max_pnl": -5.0,
         "rarity": "trash",
@@ -88,7 +88,7 @@ ABSURD_FISH_DATA = [
     {
         "name": "Empty Promise",
         "emoji": "💨",
-        "description": "Technically caught somTACing, but it's nothing",
+        "description": "Technically caught something, but it's nothing",
         "min_pnl": -5.0,
         "max_pnl": 0.0,
         "rarity": "trash",
@@ -689,7 +689,7 @@ ABSURD_FISH_DATA = [
         "min_pnl": 35.0,
         "max_pnl": 55.0,
         "rarity": "rare",
-        "ai_prompt": "TACereal fish surrounded by dream bubbles and sleep imagery"
+        "ai_prompt": "Ethereal fish surrounded by dream bubbles and sleep imagery"
     },
     {
         "name": "Meditation App Monk Fish",
@@ -762,7 +762,7 @@ ABSURD_FISH_DATA = [
     {
         "name": "Autocorrect Anchovy",
         "emoji": "📱",
-        "description": "Meant to say somTACing else entirely",
+        "description": "Meant to say something else entirely",
         "min_pnl": -8.0,
         "max_pnl": 0.0,
         "rarity": "trash",
@@ -1052,7 +1052,7 @@ ABSURD_FISH_DATA = [
     {
         "name": "Trial Version Trout",
         "emoji": "🆓",
-        "description": "Limited features but it's somTACing",
+        "description": "Limited features but it's something",
         "min_pnl": 0.4,
         "max_pnl": 3.0,
         "rarity": "common",

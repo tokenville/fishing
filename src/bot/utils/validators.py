@@ -76,7 +76,8 @@ async def check_quick_fishing(position: dict, base_currency: str, entry_price: f
     Check if user is trying to fish too quickly (< 1 minute with minimal P&L change).
     Returns (should_block, message)
     """
-    from src.utils.crypto_price import get_crypto_price, calculate_pnl, format_time_fishing, get_fishing_time_seconds
+    from src.utils.crypto_price import get_crypto_price
+    from src.utils.fishing_calculations import calculate_pnl, format_time_fishing, get_fishing_time_seconds
     from src.bot.ui.messages import get_quick_fishing_message
 
     time_fishing = format_time_fishing(position['entry_time'])

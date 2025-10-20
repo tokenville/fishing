@@ -48,11 +48,20 @@ def format_fishing_complete_caption(username, catch_story, rod_name, leverage, p
     For raw entry_time, use format_fishing_duration_from_entry() first.
     """
     safe_username = username if username else "Angler"
+
+    # Treat very small PnL as zero (< 0.001% is essentially no movement)
+    if abs(pnl_percent) < 0.001:
+        pnl_percent = 0.0
+
     pnl_color = "🟢" if pnl_percent >= 0 else "🔴"
 
     # Calculate dollar P&L based on user level using centralized helper
     stake_amount = user_level * 1000
     dollar_pnl = calculate_pnl_dollars(entry_price, current_price, leverage, stake_amount)
+
+    # Treat very small dollar PnL as zero
+    if abs(dollar_pnl) < 0.01:
+        dollar_pnl = 0.0
 
     # Format PnL with dynamic precision
     if abs(pnl_percent) < 0.01:
@@ -93,11 +102,20 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
     For raw entry_time, use format_fishing_duration_from_entry() first.
     """
     safe_username = escape_markdown(username) if username else "Angler"
+
+    # Treat very small PnL as zero (< 0.001% is essentially no movement)
+    if abs(current_pnl) < 0.001:
+        current_pnl = 0.0
+
     pnl_color = "🟢" if current_pnl >= 0 else "🔴"
 
     # Calculate dollar P&L based on user level using centralized helper
     stake_amount = user_level * 1000
     dollar_pnl = calculate_pnl_dollars(entry_price, current_price, leverage, stake_amount)
+
+    # Treat very small dollar PnL as zero
+    if abs(dollar_pnl) < 0.01:
+        dollar_pnl = 0.0
 
     # Format PnL with dynamic precision (more decimal places for small changes)
     if abs(current_pnl) < 0.01:
@@ -122,11 +140,12 @@ def format_enhanced_status_message(username, pond_name, pond_pair, rod_name, lev
 
     return (
         f"🎣 <b>Fishing status {safe_username}:</b>\n\n"
+
+        f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})\n\n</b>"
         f"Rod: {rod_name} (leverage {leverage}x, stake ${stake_amount})\n"
-        f"Fishery: {pond_name} ({pond_pair})\n"
-        f"⏱ Fishing time: <b>{time_fishing}</b>\n"
-        f"📈 Position: ${format_price(entry_price)} → <b>${format_price(current_price)}</b>\n"
-        f"{pnl_color} PnL: <b>{pnl_str} ({dollar_str})</b>"
+        f"Position: ${format_price(entry_price)} → <b>${format_price(current_price)}</b>\n"
+        f"Fishing time: <b>{time_fishing}</b>\n\n"  
+        f"Pond: {pond_name} ({pond_pair})\n" 
     )
 
 

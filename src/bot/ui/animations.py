@@ -11,46 +11,28 @@ logger = logging.getLogger(__name__)
 
 
 async def animate_casting_sequence(message, username, user_level, entry_price, pond_id=None, rod_id=None):
-    """Animate the casting sequence with text-only messages"""
-    import random
+    """Animate the casting sequence with text-only messages
+
+    Note: pond_id and rod_id are now required. The old fallback logic for random
+    selection has been removed as all ponds are now group-based and selected explicitly.
+    """
     from .messages import get_cast_header, get_cast_animated_sequence, format_cast_message
-    from src.database.db_manager import get_available_ponds, get_user_rods, get_pond_by_id, get_rod_by_id, give_starter_rod
+    from src.database.db_manager import get_pond_by_id, get_rod_by_id
 
     try:
         user_id = message.from_user.id
 
-        # Use provided pond and rod if available, otherwise select randomly
-        if pond_id and rod_id:
-            selected_pond = await get_pond_by_id(pond_id)
-            selected_rod = await get_rod_by_id(rod_id)
+        # Pond and rod must be provided
+        if not pond_id or not rod_id:
+            logger.error(f"Missing pond_id or rod_id for user {user_id}")
+            return None, None, None
 
-            if not selected_pond or not selected_rod:
-                logger.error(f"Invalid pond_id {pond_id} or rod_id {rod_id}")
-                return None, None, None
+        selected_pond = await get_pond_by_id(pond_id)
+        selected_rod = await get_rod_by_id(rod_id)
 
-        else:
-            # Original random selection logic
-            available_ponds = await get_available_ponds(user_level)
-            user_rods = await get_user_rods(user_id)
-
-            # Fallback: ensure user has starter rod and access to starter pond
-            if not user_rods:
-                logger.warning(f"User {user_id} has no rods, giving starter rod")
-                await give_starter_rod(user_id)
-                user_rods = await get_user_rods(user_id)
-
-            if not available_ponds:
-                logger.warning(f"User {user_id} has no available ponds for level {user_level}")
-                # Force access to starter pond (level 1) regardless of user level
-                available_ponds = await get_available_ponds(1)
-
-            if not available_ponds or not user_rods:
-                logger.error(f"Still no available ponds or rods for user {user_id} after fallback")
-                return None, None, None
-
-            # Select random pond and rod
-            selected_pond = random.choice(available_ponds)
-            selected_rod = random.choice(user_rods)
+        if not selected_pond or not selected_rod:
+            logger.error(f"Invalid pond_id {pond_id} or rod_id {rod_id}")
+            return None, None, None
 
         # Extract data from asyncpg Records
         pond_name = selected_pond['name']

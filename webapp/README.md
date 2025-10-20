@@ -109,7 +109,7 @@ userRods: [
 
 ## 🔧 API Endpoints (Mock Server)
 
-| Endpoint | MTACod | Description |
+| Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/user/:userId/stats` | GET | User statistics |
 | `/api/user/:userId/fish` | GET | Fish collection |

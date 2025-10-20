@@ -8,7 +8,7 @@ from telegram import Update, Chat
 from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
-    get_user, create_user, ensure_user_has_level, give_starter_rod,
+    get_user, create_user, ensure_user_has_level,
     is_onboarding_completed
 )
 from src.bot.ui.formatters import get_full_start_message
@@ -40,17 +40,48 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not user:
             await create_user(user_id, username)
             user = await get_user(user_id)
-            await give_starter_rod(user_id)
-            user = await get_user(user_id)  # Refresh after starter rod
         else:
-            # Ensure existing user has level and starter rod
+            # Ensure existing user has level
             await ensure_user_has_level(user_id)
-            await give_starter_rod(user_id)
             user = await get_user(user_id)  # Refresh user data
 
-        # Check if user has completed onboarding
+        # Check if user has completed onboarding (cache for later use)
         onboarding_completed = await is_onboarding_completed(user_id)
         logger.debug(f"User {user_id} onboarding completed: {onboarding_completed}")
+
+        # Handle deep link for joining groups
+        if context.args and len(context.args) > 0 and context.args[0].startswith('join_'):
+            try:
+                chat_id = int(context.args[0].replace('join_', ''))
+                from src.bot.features.group_management import connect_user_to_pond
+                success, message, pond_name, is_new_member = await connect_user_to_pond(user_id, username, chat_id)
+
+                if success:
+                    logger.info(f"User {user_id} joined pond {chat_id} ({pond_name}) via deep link (new_member={is_new_member})")
+
+                    # If user is already a member and onboarding is complete, show cast CTA
+                    if not is_new_member and onboarding_completed:
+                        from src.bot.features.group_management import show_already_member_cta
+                        await show_already_member_cta(context, user_id, pond_name)
+                        return  # Exit early
+
+                    # Only send pond welcome message if user has completed onboarding
+                    # New users will see pond info in onboarding step 1
+                    if onboarding_completed and is_new_member:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=message,
+                            parse_mode='HTML'
+                        )
+                else:
+                    logger.warning(f"Failed to connect user {user_id} to pond {chat_id} via deep link")
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=message,
+                        parse_mode='HTML'
+                    )
+            except (ValueError, Exception) as e:
+                logger.error(f"Deep link error for user {user_id}: {e}")
 
         if onboarding_completed:
             # Show full game guide for users who completed onboarding

@@ -51,7 +51,7 @@ function getUsernameFromTelegram() {
 async function apiRequest(endpoint, options = {}) {
     try {
         const defaultOptions = {
-            mTACod: 'GET',
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             }
@@ -62,7 +62,7 @@ async function apiRequest(endpoint, options = {}) {
         const url = `${baseUrl}/api${endpoint}`;
         
         if (appConfig.DEBUG) {
-            console.log('API Request:', options.mTACod || 'GET', url);
+            console.log('API Request:', options.method || 'GET', url);
         }
         
         const response = await fetch(url, {
@@ -203,7 +203,7 @@ async function setActiveRod(rodId) {
     try {
         const userId = getUserIdFromTelegram();
         await apiRequest(`/user/${userId}/active-rod`, {
-            mTACod: 'POST',
+            method: 'POST',
             body: JSON.stringify({ rod_id: rodId })
         });
         
@@ -1110,7 +1110,7 @@ async function purchaseProduct(productId) {
         
         // Create purchase invoice
         const response = await apiRequest(`/user/${userId}/purchase`, {
-            mTACod: 'POST',
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },

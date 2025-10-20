@@ -20,7 +20,8 @@ from src.database.db_manager import (
     get_user_virtual_balance, get_flexible_leaderboard,
     get_user_group_ponds, get_active_position, create_position_with_gear,
     use_bait, ensure_user_has_active_rod, get_pond_by_id, get_rod_by_id,
-    get_suitable_fish, close_position, claim_inheritance, check_inheritance_status
+    get_suitable_fish, close_position, can_use_free_cast, mark_onboarding_action,
+    update_user_balance_after_hook
 )
 from src.utils.crypto_price import get_crypto_price as get_crypto_price_util
 from src.utils.fishing_calculations import (
@@ -41,7 +42,7 @@ class WebAppServer:
         """CORS middleware for API requests"""
         response = await handler(request)
         response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-MTACods'] = 'GET, POST, PUT, OPTIONS'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
     
@@ -60,11 +61,7 @@ class WebAppServer:
         self.app.router.add_get('/api/user/{user_id}/active-rod', self.get_user_active_rod)
         self.app.router.add_post('/api/user/{user_id}/active-rod', self.set_user_active_rod)
         self.app.router.add_get('/api/fish/{fish_id}/image', self.get_fish_image)
-        
-        # Inheritance endpoint
-        self.app.router.add_post('/api/user/{user_id}/claim-inheritance', self.claim_user_inheritance)
-        self.app.router.add_get('/api/user/{user_id}/inheritance-status', self.get_inheritance_status)
-        
+
         # Leaderboard and balance endpoints
         self.app.router.add_get('/api/user/{user_id}/balance', self.get_user_balance)
         self.app.router.add_get('/api/leaderboard', self.get_leaderboard)
@@ -725,17 +722,26 @@ class WebAppServer:
             
             # Check and consume BAIT
             user = await get_user(user_id)
-            if not user or user['bait_tokens'] <= 0:
+
+            # Check if user can use free tutorial cast
+            can_use_free = await can_use_free_cast(user_id)
+
+            # Check if user has enough BAIT (skip check for free tutorial cast)
+            if not can_use_free and (not user or user['bait_tokens'] <= 0):
                 return web.json_response({
                     'success': False,
                     'error': 'insufficient_bait'
                 }, status=400)
-            
+
             # Ensure user has active rod
             await ensure_user_has_active_rod(user_id)
-            
-            # Use BAIT token
-            await use_bait(user_id)
+
+            # Use BAIT token (skip for free tutorial cast)
+            if can_use_free:
+                # Mark that user used their free cast
+                await mark_onboarding_action(user_id, 'first_cast')
+            else:
+                await use_bait(user_id)
             
             # Create position
             await create_position_with_gear(user_id, pond_id, rod_id, entry_price)
@@ -803,7 +809,7 @@ class WebAppServer:
             
             # Quick fishing check - prevent fishing in under 60 seconds with minimal P&L
             if fishing_time_seconds < 60 and abs(pnl_percent) < 0.1:
-                from src.bot.message_templates import get_quick_fishing_message
+                from src.bot.ui.messages import get_quick_fishing_message
                 quick_message = get_quick_fishing_message(fishing_time_seconds)
                 return web.json_response({
                     'success': False,
@@ -831,16 +837,18 @@ class WebAppServer:
             
             if fish_data:
                 # Generate catch story
-                from src.bot.message_templates import get_catch_story_from_db
+                from src.bot.ui.messages import get_catch_story_from_db
                 catch_story = get_catch_story_from_db(fish_data)
-                
-                # Generate fish card image
-                from src.generators.fish_card_generator import generate_fish_card_from_db
-                card_image = await generate_fish_card_from_db(fish_data)
-                
+
                 # Close position with fish ID
                 await close_position(position['id'], current_price, pnl_percent, fish_data['id'])
-                
+
+                # Update user balance based on P&L
+                await update_user_balance_after_hook(user_id, pnl_percent)
+
+                # Get fish image URL (image will be generated on-demand if needed)
+                fish_image_url = f"/api/fish/{fish_data['id']}/image"
+
                 # Return success with fish data
                 return web.json_response({
                     'success': True,
@@ -850,7 +858,7 @@ class WebAppServer:
                         'emoji': fish_data['emoji'],
                         'description': fish_data['description'],
                         'rarity': fish_data['rarity'],
-                        'image_path': card_image,
+                        'image_url': fish_image_url,
                         'catch_story': catch_story
                     },
                     'result': {
@@ -865,6 +873,10 @@ class WebAppServer:
             else:
                 # Emergency fallback
                 await close_position(position['id'], current_price, pnl_percent, None)
+
+                # Update user balance based on P&L
+                await update_user_balance_after_hook(user_id, pnl_percent)
+
                 return web.json_response({
                     'success': True,
                     'fish': None,
@@ -876,7 +888,7 @@ class WebAppServer:
                         'pond_name': pond['name'] if pond else 'Unknown Pond',
                         'rod_name': rod['name'] if rod else 'Unknown Rod'
                     },
-                    'message': f'Caught somTACing strange! P&L: {pnl_percent:+.1f}%'
+                    'message': f'Caught something strange! P&L: {pnl_percent:+.1f}%'
                 })
                 
         except ValueError as e:
@@ -948,63 +960,6 @@ class WebAppServer:
             logger.error(f"Error getting bot info: {e}")
             return web.json_response({'error': 'Internal server error'}, status=500)
     
-    async def claim_user_inheritance(self, request):
-        """Claim inheritance for a new user"""
-        try:
-            user_id = int(request.match_info['user_id'])
-            
-            # Claim inheritance and get result
-            success = await claim_inheritance(user_id)
-            
-            if success:
-                # Send Telegram notification
-                try:
-                    from src.bot.animations import send_telegram_notification
-                    await send_telegram_notification(
-                        user_id, 
-                        "🎁 <b>Congratulations!</b>\n\nYou received your crypto anarchist grandfather's inheritance:\n💰 $10,000 starting capital\n🪱 +10 BAIT tokens\n\n<i>Use /cast for your first fishing trade!</i>",
-                        self.application
-                    )
-                except Exception as notification_error:
-                    logger.warning(f"Failed to send inheritance notification to user {user_id}: {notification_error}")
-                
-                return web.json_response({
-                    'success': True,
-                    'message': 'Inheritance claimed successfully!',
-                    'bonus': {
-                        'virtual_balance': 10000,
-                        'bait_tokens': 10
-                    }
-                })
-            else:
-                return web.json_response({
-                    'success': False,
-                    'error': 'Inheritance already claimed or user not found'
-                }, status=400)
-                
-        except ValueError:
-            return web.json_response({'error': 'Invalid user ID'}, status=400)
-        except Exception as e:
-            logger.error(f"Error claiming inheritance for user {user_id}: {e}")
-            return web.json_response({'error': 'Internal server error'}, status=500)
-    
-    async def get_inheritance_status(self, request):
-        """Check if user has claimed their inheritance"""
-        try:
-            user_id = int(request.match_info['user_id'])
-            
-            inheritance_claimed = await check_inheritance_status(user_id)
-            
-            return web.json_response({
-                'user_id': user_id,
-                'inheritance_claimed': inheritance_claimed
-            })
-            
-        except ValueError:
-            return web.json_response({'error': 'Invalid user ID'}, status=400)
-        except Exception as e:
-            logger.error(f"Error checking inheritance status for user {user_id}: {e}")
-            return web.json_response({'error': 'Internal server error'}, status=500)
 
 # Global server instance
 web_server = None

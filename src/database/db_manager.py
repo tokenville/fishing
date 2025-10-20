@@ -186,30 +186,12 @@ async def init_database():
             CREATE TABLE IF NOT EXISTS users (
                 telegram_id BIGINT PRIMARY KEY,
                 username TEXT,
-                bait_tokens INTEGER DEFAULT 10,
+                bait_tokens INTEGER DEFAULT 0,
                 level INTEGER DEFAULT 1,
                 experience INTEGER DEFAULT 0,
-                balance_bonus NUMERIC(18, 2) DEFAULT 0,
-                inheritance_claimed BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Add inheritance_claimed column if it doesn't exist (migration)
-        try:
-            await conn.execute('''
-                ALTER TABLE users ADD COLUMN inheritance_claimed BOOLEAN DEFAULT FALSE
-            ''')
-        except Exception:
-            # Column already exists, ignore error
-            pass
-
-        try:
-            await conn.execute('''
-                ALTER TABLE users ADD COLUMN balance_bonus NUMERIC(18, 2) DEFAULT 0
-            ''')
-        except Exception:
-            pass
         
         # Create ponds table (enhanced for group support)
         await conn.execute('''
@@ -269,7 +251,7 @@ async def init_database():
                 user_id BIGINT,
                 rod_id INTEGER,
                 acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE,
                 FOREIGN KEY (rod_id) REFERENCES rods (id),
                 UNIQUE(user_id, rod_id)
             )
@@ -283,8 +265,17 @@ async def init_database():
                 active_rod_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE,
                 FOREIGN KEY (active_rod_id) REFERENCES rods (id)
+            )
+        ''')
+
+        # Create user_balances table for static balance storage
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS user_balances (
+                user_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,
+                balance NUMERIC(18, 2) DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -321,7 +312,7 @@ async def init_database():
                 exit_time TIMESTAMP,
                 pnl_percent REAL,
                 fish_caught_id INTEGER,
-                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE,
                 FOREIGN KEY (pond_id) REFERENCES ponds (id),
                 FOREIGN KEY (rod_id) REFERENCES rods (id),
                 FOREIGN KEY (fish_caught_id) REFERENCES fish (id)
@@ -356,7 +347,7 @@ async def init_database():
                 chat_id BIGINT,
                 joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 is_active BOOLEAN DEFAULT true,
-                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE,
                 UNIQUE(user_id, chat_id)
             )
         ''')
@@ -374,7 +365,7 @@ async def init_database():
             )
         ''')
         
-        # Create transactions table for payment tracking  
+        # Create transactions table for payment tracking
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
                 id SERIAL PRIMARY KEY,
@@ -391,12 +382,12 @@ async def init_database():
                 invoice_payload TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (telegram_id),
+                FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE,
                 FOREIGN KEY (product_id) REFERENCES products (id)
             );
-            
+
             CREATE TABLE IF NOT EXISTS onboarding_progress (
-                user_id BIGINT PRIMARY KEY REFERENCES users(telegram_id),
+                user_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,
                 current_step VARCHAR(50) DEFAULT 'welcome',
                 completed BOOLEAN DEFAULT FALSE,
                 first_cast_used BOOLEAN DEFAULT FALSE,
@@ -449,18 +440,26 @@ async def get_user(telegram_id: int) -> Optional[asyncpg.Record]:
         )
 
 async def create_user(telegram_id: int, username: str):
-    """Create new user with default BAIT tokens and starter rod"""
+    """Create new user with 0 BAIT tokens, 0 balance, and 1 Long starter rod"""
     pool = await get_pool()
     async with pool.acquire() as conn:
+        # Create user with 0 BAIT
         await conn.execute('''
             INSERT INTO users (telegram_id, username, bait_tokens, level, experience)
-            VALUES ($1, $2, 10, 1, 0)
+            VALUES ($1, $2, 0, 1, 0)
             ON CONFLICT (telegram_id) DO NOTHING
         ''', telegram_id, username)
-    
-    # Give starter rod
-    await give_starter_rod(telegram_id)
-    print(f"Created user: {username} ({telegram_id}) with starter rod")
+
+        # Create balance entry with starting $0
+        await conn.execute('''
+            INSERT INTO user_balances (user_id, balance)
+            VALUES ($1, 0)
+            ON CONFLICT (user_id) DO NOTHING
+        ''', telegram_id)
+
+    # Give only 1 Long starter rod (Short rod will be given on first cast)
+    await give_single_starter_rod(telegram_id, rod_type='long')
+    print(f"Created user: {username} ({telegram_id}) with $0 balance, 0 BAIT, 1 Long rod")
 
 async def get_active_position(telegram_id: int) -> Optional[asyncpg.Record]:
     """Get user's active fishing position"""
@@ -514,6 +513,45 @@ async def add_bait_tokens(telegram_id: int, amount: int) -> bool:
             WHERE telegram_id = $2
         ''', amount, telegram_id)
         return result.split()[-1] != '0'
+
+async def get_user_balance(user_id: int) -> float:
+    """Get user's current balance from user_balances table"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(
+            'SELECT balance FROM user_balances WHERE user_id = $1',
+            user_id
+        )
+        return float(result) if result else 0.0
+
+async def update_user_balance_after_hook(user_id: int, pnl_percent: float) -> None:
+    """Update user balance after hook based on P&L
+    Each position uses $1000 stake
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Calculate balance change: $1000 stake * pnl_percent / 100
+        delta = 1000 * pnl_percent / 100
+
+        await conn.execute('''
+            UPDATE user_balances
+            SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $2
+        ''', delta, user_id)
+
+        logger.info(f"Updated balance for user {user_id}: delta={delta:.2f}, pnl={pnl_percent:.2f}%")
+
+async def add_balance_bonus(user_id: int, amount: float) -> None:
+    """Add bonus to user balance (e.g., first catch reward)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            UPDATE user_balances
+            SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $2
+        ''', amount, user_id)
+
+        logger.info(f"Added balance bonus for user {user_id}: +${amount}")
 
 # Note: Static ponds removed - all ponds are now created dynamically when bot is added to groups
 
@@ -597,15 +635,13 @@ async def _insert_default_products(conn: asyncpg.Connection):
             VALUES ($1, $2, $3, $4, $5)
         ''', products_data)
 
-async def get_available_ponds(user_level: int) -> List[asyncpg.Record]:
-    """Get ponds available for user level"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetch('''
-            SELECT * FROM ponds 
-            WHERE required_level <= $1 AND is_active = true
-            ORDER BY required_level
-        ''', user_level)
+async def get_available_ponds(user_id: int) -> List[asyncpg.Record]:
+    """Get ponds available for user (group ponds only)
+
+    Note: This function now returns only group ponds that the user has access to.
+    Static ponds have been removed from the system.
+    """
+    return await get_user_group_ponds(user_id)
 
 async def get_user_rods(telegram_id: int) -> List[asyncpg.Record]:
     """Get all rods owned by user"""
@@ -617,6 +653,69 @@ async def get_user_rods(telegram_id: int) -> List[asyncpg.Record]:
             WHERE ur.user_id = $1
             ORDER BY r.leverage
         ''', telegram_id)
+
+async def give_single_starter_rod(telegram_id: int, rod_type: str = 'long', conn: Optional[asyncpg.Connection] = None):
+    """Give a single starter rod (Long or Short) to user"""
+
+    async def _assign(connection: asyncpg.Connection):
+        # Get the specific starter rod
+        starter_rod = await connection.fetchrow(
+            'SELECT id FROM rods WHERE is_starter = true AND rod_type = $1 LIMIT 1',
+            rod_type
+        )
+
+        if not starter_rod:
+            logger.warning(f"No starter rod found for type {rod_type}")
+            return
+
+        # Check if user already has this rod
+        has_rod = await connection.fetchval(
+            'SELECT 1 FROM user_rods WHERE user_id = $1 AND rod_id = $2',
+            telegram_id,
+            starter_rod['id']
+        )
+
+        if has_rod:
+            logger.info(f"User {telegram_id} already has {rod_type} rod")
+            return
+
+        # Give the rod
+        await connection.execute(
+            '''
+            INSERT INTO user_rods (user_id, rod_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id, rod_id) DO NOTHING
+            ''',
+            telegram_id,
+            starter_rod['id'],
+        )
+
+        # Set as active rod if user has no active rod
+        has_active = await connection.fetchval(
+            'SELECT 1 FROM user_settings WHERE user_id = $1',
+            telegram_id
+        )
+
+        if not has_active:
+            await connection.execute(
+                '''
+                INSERT INTO user_settings (user_id, active_rod_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET active_rod_id = EXCLUDED.active_rod_id
+                ''',
+                telegram_id,
+                starter_rod['id'],
+            )
+
+        logger.info(f"Gave {rod_type} starter rod to user {telegram_id}")
+
+    if conn is not None:
+        await _assign(conn)
+        return
+
+    pool = await get_pool()
+    async with pool.acquire() as pooled_conn:
+        await _assign(pooled_conn)
 
 async def give_starter_rod(telegram_id: int, conn: Optional[asyncpg.Connection] = None):
     """Give both starter rods (Long & Short) to user if they don't have any."""
@@ -1089,38 +1188,30 @@ async def ensure_user_has_active_rod(user_id: int) -> Optional[asyncpg.Record]:
 
 # === VIRTUAL BALANCE & LEADERBOARD FUNCTIONS ===
 
-async def get_user_virtual_balance(user_id: int) -> float:
-    """Calculate user's virtual balance based on all closed positions
-    Starting balance: $10,000
-    Each position: $1,000 stake
-    """
+async def get_user_virtual_balance(user_id: int) -> dict:
+    """Get user's balance from user_balances table with trading stats"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        result = await conn.fetchrow('''
-            SELECT 10000 + COALESCE(SUM(1000 * pnl_percent / 100), 0) as balance,
-                   COUNT(*) as total_trades,
+        # Get balance from user_balances
+        balance = await conn.fetchval(
+            'SELECT balance FROM user_balances WHERE user_id = $1',
+            user_id
+        )
+
+        # Get trading stats from positions
+        stats = await conn.fetchrow('''
+            SELECT COUNT(*) as total_trades,
                    SUM(CASE WHEN pnl_percent > 0 THEN 1 ELSE 0 END) as winning_trades,
                    AVG(pnl_percent) as avg_pnl
-            FROM positions 
+            FROM positions
             WHERE user_id = $1 AND status = 'closed'
         ''', user_id)
-        bonus = await conn.fetchval(
-            'SELECT balance_bonus FROM users WHERE telegram_id = $1',
-            user_id
-        ) or 0
-        
-        if result:
-            return {
-                'balance': float(result['balance']) + float(bonus),
-                'total_trades': result['total_trades'] or 0,
-                'winning_trades': result['winning_trades'] or 0,
-                'avg_pnl': float(result['avg_pnl']) if result['avg_pnl'] else 0
-            }
+
         return {
-            'balance': 10000.0 + float(bonus),
-            'total_trades': 0,
-            'winning_trades': 0,
-            'avg_pnl': 0
+            'balance': float(balance) if balance else 0.0,
+            'total_trades': stats['total_trades'] or 0,
+            'winning_trades': stats['winning_trades'] or 0,
+            'avg_pnl': float(stats['avg_pnl']) if stats['avg_pnl'] else 0
         }
 
 async def get_flexible_leaderboard(
@@ -1175,40 +1266,35 @@ async def get_flexible_leaderboard(
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # Main query with ranks
+        # Main query with ranks - using user_balances table
         query = f'''
-            WITH user_balances AS (
-                SELECT 
+            WITH user_stats AS (
+                SELECT
                     u.telegram_id,
                     u.username,
                     u.level,
-                    10000
-                    + COALESCE(SUM(1000 * p.pnl_percent / 100), 0)
-                    + COALESCE(u.balance_bonus, 0) as balance,
+                    ub.balance,
                     COUNT(p.id) as total_trades,
                     AVG(p.pnl_percent) as avg_pnl,
                     MAX(p.pnl_percent) as best_trade,
                     MIN(p.pnl_percent) as worst_trade,
                     MAX(p.exit_time) as last_trade_time,
-                    RANK() OVER (
-                        ORDER BY 10000
-                                 + COALESCE(SUM(1000 * p.pnl_percent / 100), 0)
-                                 + COALESCE(u.balance_bonus, 0) DESC
-                    ) as rank
+                    RANK() OVER (ORDER BY ub.balance DESC) as rank
                 FROM users u
+                LEFT JOIN user_balances ub ON u.telegram_id = ub.user_id
                 LEFT JOIN positions p ON u.telegram_id = p.user_id AND {where_clause}
-                GROUP BY u.telegram_id, u.username, u.level, u.balance_bonus
+                GROUP BY u.telegram_id, u.username, u.level, ub.balance
                 HAVING COUNT(p.id) > 0  -- Only active players
             ),
             stats AS (
-                SELECT COUNT(*) as total_players FROM user_balances
+                SELECT COUNT(*) as total_players FROM user_stats
             )
-            SELECT 
-                ub.*,
+            SELECT
+                us.*,
                 s.total_players
-            FROM user_balances ub
+            FROM user_stats us
             CROSS JOIN stats s
-            ORDER BY ub.balance DESC
+            ORDER BY us.balance DESC
         '''
         
         all_results = await conn.fetch(query, *params)
@@ -1369,10 +1455,22 @@ async def remove_user_from_group(user_id: int, chat_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute('''
-            UPDATE group_memberships 
+            UPDATE group_memberships
             SET is_active = false
             WHERE user_id = $1 AND chat_id = $2
         ''', user_id, chat_id)
+
+async def is_user_in_group_pond(user_id: int, chat_id: int) -> bool:
+    """Check if user is already a member of a group pond"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.fetchval('''
+            SELECT EXISTS(
+                SELECT 1 FROM group_memberships
+                WHERE user_id = $1 AND chat_id = $2 AND is_active = true
+            )
+        ''', user_id, chat_id)
+        return result
 
 async def get_user_group_ponds(user_id: int) -> List[asyncpg.Record]:
     """Get all active group ponds that user has access to"""
@@ -1558,47 +1656,6 @@ async def refund_transaction(transaction_id: int) -> bool:
             logger.info(f"Transaction {transaction_id} refunded: subtracted {bait_to_subtract} BAIT from user {transaction['user_id']}")
             return True
 
-async def claim_inheritance(user_id: int) -> bool:
-    """Claim inheritance for a new user - gives $10,000 virtual balance and 5 BAIT tokens"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        # Check if inheritance already claimed
-        result = await conn.fetchrow('''
-            SELECT inheritance_claimed FROM users WHERE telegram_id = $1
-        ''', user_id)
-        
-        if not result:
-            logger.warning(f"User {user_id} not found when claiming inheritance")
-            return False
-            
-        if result['inheritance_claimed']:
-            logger.warning(f"User {user_id} already claimed inheritance")
-            return False
-        
-        # Mark inheritance as claimed and give bonus BAIT tokens
-        # Virtual balance is automatically $10,000 due to the formula: 10000 + SUM(positions)
-        # Since new users have no positions, they get exactly $10,000
-        await conn.execute('''
-            UPDATE users 
-            SET inheritance_claimed = TRUE, bait_tokens = bait_tokens + 10
-            WHERE telegram_id = $1
-        ''', user_id)
-        
-        logger.info(f"User {user_id} claimed inheritance: $10,000 virtual balance (automatic) + 10 BAIT tokens")
-        return True
-
-async def check_inheritance_status(user_id: int) -> bool:
-    """Check if user has claimed their inheritance"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        result = await conn.fetchrow('''
-            SELECT inheritance_claimed FROM users WHERE telegram_id = $1
-        ''', user_id)
-        
-        if not result:
-            return False
-            
-        return result['inheritance_claimed']
 
 # Onboarding system functions
 async def get_onboarding_progress(user_id: int) -> Optional[asyncpg.Record]:
@@ -1694,8 +1751,8 @@ async def award_group_bonus(user_id: int, bait_reward: int = 10) -> str:
     logger.info("Granted %s BAIT group bonus to user %s", bait_reward, user_id)
     return f"🪱 +{bait_reward} BAIT for connecting a new pond!"
 
-async def award_first_catch_reward(user_id: int, balance_reward: int = 1000) -> str:
-    """Grant first-catch reward by crediting virtual balance if not yet claimed."""
+async def award_first_catch_reward(user_id: int, balance_reward: int = 10000) -> str:
+    """Grant first-catch reward by adding to user balance"""
     progress = await get_onboarding_progress(user_id)
     if not progress:
         await create_onboarding_progress(user_id)
@@ -1711,36 +1768,23 @@ async def award_first_catch_reward(user_id: int, balance_reward: int = 1000) -> 
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute(
-                '''
-                UPDATE onboarding_progress
-                SET first_catch_reward_claimed = TRUE, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = $1
-                ''',
+                'UPDATE onboarding_progress SET first_catch_reward_claimed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
                 user_id,
             )
-            await conn.execute(
-                '''
-                UPDATE users
-                SET balance_bonus = COALESCE(balance_bonus, 0) + $1
-                WHERE telegram_id = $2
-                ''',
-                balance_reward,
-                user_id,
-            )
+            # Add bonus to user_balances - use INSERT ON CONFLICT to create record if it doesn't exist
+            await conn.execute('''
+                INSERT INTO user_balances (user_id, balance)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE
+                SET balance = user_balances.balance + $2, updated_at = CURRENT_TIMESTAMP
+            ''', user_id, balance_reward)
 
-    logger.info(
-        "Granted %s balance bonus first-catch reward to user %s",
-        balance_reward,
-        user_id,
-    )
-    return (
-        f"🏆 +${balance_reward} virtual balance for your first catch!\n"
-        "🐟 Keep fishing — rare fish bring even more rewards."
-    )
+    logger.info("Granted $%s balance bonus first-catch reward to user %s", balance_reward, user_id)
+    return f"🏆 +${balance_reward} virtual balance for your first catch!\n🐟 Keep fishing — rare fish bring even more rewards."
 
 
 async def award_first_cast_reward(user_id: int) -> Optional[str]:
-    """Grant rod reward for the first cast if not yet claimed."""
+    """Grant Short rod reward for the first cast if not yet claimed"""
     progress = await get_onboarding_progress(user_id)
     if not progress:
         await create_onboarding_progress(user_id)
@@ -1762,12 +1806,14 @@ async def award_first_cast_reward(user_id: int) -> Optional[str]:
                 ''',
                 user_id,
             )
-            await give_starter_rod(user_id, conn)
+            # Give Short rod (user already has Long from registration)
+            await give_single_starter_rod(user_id, rod_type='short', conn=conn)
 
-    logger.info("Granted starter rods to user %s after first cast", user_id)
+    logger.info("Granted Short rod to user %s after first cast", user_id)
     return (
-        "🎣 New gear unlocked!\n\n"
-        "You got Long & Short rods with different leverage. Pick one before casting — more advanced models dropping soon."
+        "🎣 New rod unlocked!\n\n"
+        "You got the Short rod with negative leverage for bearish positions. "
+        "Now you have both Long & Short rods!"
     )
 
 async def complete_onboarding(user_id: int):
@@ -1807,5 +1853,39 @@ async def should_get_special_catch(user_id: int) -> Optional[str]:
     progress = await get_onboarding_progress(user_id)
     if not progress or progress['completed']:
         return None
-    
+
     return None
+
+async def migrate_user_balances() -> int:
+    """Migrate existing users to new balance system
+    Calculate balance from positions PnL and save to user_balances
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Get all users
+        users = await conn.fetch('SELECT telegram_id FROM users')
+        migrated_count = 0
+
+        for user in users:
+            user_id = user['telegram_id']
+
+            # Calculate balance from closed positions only
+            result = await conn.fetchrow('''
+                SELECT COALESCE(SUM(1000 * pnl_percent / 100), 0) as balance
+                FROM positions
+                WHERE user_id = $1 AND status = 'closed'
+            ''', user_id)
+
+            balance = float(result['balance']) if result else 0.0
+
+            # Insert/update in user_balances
+            await conn.execute('''
+                INSERT INTO user_balances (user_id, balance)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET balance = $2, updated_at = CURRENT_TIMESTAMP
+            ''', user_id, balance)
+
+            migrated_count += 1
+
+        logger.info(f"Migrated {migrated_count} user balances to new system")
+        return migrated_count

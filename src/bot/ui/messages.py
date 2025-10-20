@@ -50,7 +50,7 @@ def get_hook_animated_sequence():
 def get_catch_story_from_db(fish_data):
     """Get simple catch story from database fish data"""
     if not fish_data:
-        return "🎣 You caught somTACing!"
+        return "🎣 You caught something!"
 
     # Handle both dict-like objects (asyncpg Record) and tuples (sqlite)
     if hasattr(fish_data, 'get'):

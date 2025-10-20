@@ -6,7 +6,7 @@ Handles manual sharing of cast and hook events to group chats.
 import logging
 from io import BytesIO
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.bot.random_messages import get_random_cast_appendix, get_random_hook_appendix
@@ -38,13 +38,26 @@ async def share_cast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # Send notification to group
         try:
+            # Get bot username for deep link
+            bot_username = (await context.bot.get_me()).username
+
+            # Create keyboard with Join Fishing button
+            keyboard = [[
+                InlineKeyboardButton(
+                    "🎣 Join Fishing",
+                    url=f"https://t.me/{bot_username}?start=join_{pond_chat_id}"
+                )
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
             cast_appendix = get_random_cast_appendix()
             group_message = f"🎣 <b>{username}</b> cast their rod into <b>{pond_name}</b>.{cast_appendix}"
             await context.bot.send_message(
                 chat_id=pond_chat_id,
                 text=group_message,
                 parse_mode='HTML',
-                disable_notification=True
+                disable_notification=True,
+                reply_markup=reply_markup
             )
 
             # Update button to show success
@@ -103,6 +116,18 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # Send notification to group
         try:
+            # Get bot username for deep link
+            bot_username = (await context.bot.get_me()).username
+
+            # Create keyboard with Join Fishing button
+            keyboard = [[
+                InlineKeyboardButton(
+                    "🎣 Join Fishing",
+                    url=f"https://t.me/{bot_username}?start=join_{pond_chat_id}"
+                )
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
             pnl_color = "🟢" if pnl_percent > 0 else "🔴" if pnl_percent < 0 else "⚪"
             hook_appendix = get_random_hook_appendix()
             group_notification = f"🎣 <b>{username}</b> caught {fish_emoji} {fish_name} from <b>{pond_name}</b>! {pnl_color} P&L: {pnl_percent:+.1f}%{hook_appendix}"
@@ -113,7 +138,8 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                     photo=BytesIO(image_bytes),
                     caption=group_notification,
                     parse_mode='HTML',
-                    disable_notification=True
+                    disable_notification=True,
+                    reply_markup=reply_markup
                 )
             elif image_path:
                 with open(image_path, 'rb') as photo_file:
@@ -122,14 +148,16 @@ async def share_hook_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         photo=photo_file,
                         caption=group_notification,
                         parse_mode='HTML',
-                        disable_notification=True
+                        disable_notification=True,
+                        reply_markup=reply_markup
                     )
             else:
                 await context.bot.send_message(
                     chat_id=pond_chat_id,
                     text=group_notification,
                     parse_mode='HTML',
-                    disable_notification=True
+                    disable_notification=True,
+                    reply_markup=reply_markup
                 )
 
             # Award 1 BAIT token for sharing

@@ -11,7 +11,6 @@ from telegram.ext import ContextTypes
 
 from src.database.db_manager import (
     create_onboarding_progress,
-    get_available_ponds,
     get_onboarding_progress,
     get_user,
     get_user_group_ponds,
@@ -153,8 +152,8 @@ class OnboardingHandler:
             "Start fishing now and dominate your pond's leaderboard!"
         )
         keyboard = [
-            [InlineKeyboardButton("🚀 Start tutorial (+10 BAIT)", callback_data="ob_start")],
-            [InlineKeyboardButton("⏭️ Skip (no bonuses)", callback_data="ob_skip")],
+            [InlineKeyboardButton("🚀 Start tutorial, get bonuses", callback_data="ob_start")],
+            [InlineKeyboardButton("⏭️ Skip bonuses)", callback_data="ob_skip")],
         ]
         return message, keyboard
 
@@ -163,21 +162,15 @@ class OnboardingHandler:
     ) -> Tuple[str, List[List[InlineKeyboardButton]]]:
         await ensure_user_has_level(user_id)
         user = await get_user(user_id)
-        user_level = user["level"] if user else 1
 
-        available_ponds = await get_available_ponds(user_level)
+        # Get only group ponds (static ponds removed)
         user_group_ponds = await get_user_group_ponds(user_id)
 
         pond_names = {
             pond["name"]
-            for pond in available_ponds
-            if pond["is_active"]
-        }
-        pond_names.update(
-            pond["name"]
             for pond in user_group_ponds
             if pond["is_active"]
-        )
+        }
 
         if pond_names:
             pond_lines = "\n".join(f"• {name}" for name in sorted(pond_names)[:5])
@@ -201,7 +194,7 @@ class OnboardingHandler:
         keyboard: List[List[InlineKeyboardButton]] = []
         if self.group_invite_link:
             keyboard.append([
-                InlineKeyboardButton("👥 Join TAC Fishing Club", url=self.group_invite_link)
+                InlineKeyboardButton("👥 Join the Fishing Club", url=self.group_invite_link)
             ])
 
         keyboard.append([
@@ -239,11 +232,11 @@ class OnboardingHandler:
             "Once your rod is in the water, /hook closes the position.\n"
             "Higher PnL = rarer fish JPEG. Even losses give you collectible trash fish.\n\n"
             "Your rod determines leverage: Long for upside, Short for downside (more rods coming soon).\n\n"
-            "First catch bonus: +$1000 virtual balance to kickstart your leaderboard grind!"
+            "First catch bonus: +$10,000 virtual balance to kickstart your leaderboard grind!"
         )
 
         keyboard = [
-            [InlineKeyboardButton("🐟 Hook (+$1000)", callback_data="ob_send_hook")],
+            [InlineKeyboardButton("🐟 Hook", callback_data="ob_send_hook")],
         ]
         return message, keyboard
 
@@ -280,7 +273,7 @@ class OnboardingHandler:
         webapp_url = os.environ.get('WEBAPP_URL')
         if webapp_url:
             keyboard.append([
-                InlineKeyboardButton("🎮 Open Mini App", web_app=WebAppInfo(url=webapp_url))
+                InlineKeyboardButton("💰 View Balance", web_app=WebAppInfo(url=webapp_url))
             ])
         return message, keyboard
 
@@ -388,11 +381,13 @@ async def onboarding_skip_callback(update: Update, context: ContextTypes.DEFAULT
 
 async def onboarding_claim_bonus_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Grant BAIT bonus for joining the primary group and continue to next step."""
-    from src.database.db_manager import add_user_to_group, get_group_pond_by_chat_id
+    from src.bot.features.group_management import connect_user_to_pond
 
     query = update.callback_query
     try:
         user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name
+
         current_step = await onboarding_handler.get_user_current_step(user_id)
         if current_step not in (
             onboarding_handler.STEP_JOIN_GROUP,
@@ -400,38 +395,67 @@ async def onboarding_claim_bonus_callback(update: Update, context: ContextTypes.
         ):
             await query.answer("This reward is not available right now.", show_alert=True)
             return
+
+        # Get primary group chat ID
+        primary_chat_id = getattr(onboarding_handler, 'group_chat_id', None)
+        if not primary_chat_id:
+            logger.warning("No primary_chat_id configured for onboarding")
+            await query.answer("❌ Onboarding group not configured", show_alert=True)
+            return
+
+        # Check if user is actually a member of the group via Telegram API
+        try:
+            member = await context.bot.get_chat_member(primary_chat_id, user_id)
+            if member.status not in ['member', 'administrator', 'creator']:
+                await query.answer(
+                    "❌ Сначала вступите в группу, чтобы получить награду!\n\n"
+                    "После вступления нажмите кнопку снова.",
+                    show_alert=True
+                )
+                return
+        except Exception as e:
+            logger.warning(f"Could not verify group membership for user {user_id}: {e}")
+            await query.answer(
+                "❌ Не удалось проверить членство в группе. Убедитесь, что вы вступили в группу.",
+                show_alert=True
+            )
+            return
+
+        # User is confirmed to be in the group - give reward
         reward_message = await award_group_bonus(user_id)
 
-        # Show alert first
+        # Connect user to pond (this adds to group_memberships correctly)
+        success, _, pond_name, _ = await connect_user_to_pond(
+            user_id,
+            username,
+            primary_chat_id
+        )
+
+        # Show reward alert
         await query.answer(reward_message, show_alert=True)
 
         # Delete the join group message after alert is shown
-        # (user will see deletion after closing alert)
         if query.message:
             try:
                 await query.message.delete()
             except Exception as del_err:
                 logger.warning(f"Could not delete join group message: {del_err}")
 
-        primary_chat_id = getattr(onboarding_handler, 'group_chat_id', None)
-        if primary_chat_id:
-            try:
-                await add_user_to_group(user_id, primary_chat_id)
-                primary_pond = await get_group_pond_by_chat_id(primary_chat_id)
-                if primary_pond:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=(
-                            f"🌊 <b>{primary_pond['name']}</b> added to your ponds!\n"
-                            "You can now select it when casting."
-                        ),
-                        parse_mode='HTML'
-                    )
-            except Exception as add_err:
-                logger.warning("Failed to register onboarding group for user %s: %s", user_id, add_err)
+        # Send pond connection confirmation if successful
+        if success and pond_name:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"🌊 <b>{pond_name}</b> added to your ponds!\n"
+                    "You can now select it when casting."
+                ),
+                parse_mode='HTML'
+            )
 
+        # Advance to next step
         await onboarding_handler.advance_step(user_id, onboarding_handler.STEP_CAST)
         await send_onboarding_message(update, context, user_id, onboarding_handler.STEP_CAST)
+
     except Exception as exc:
         logger.error("Error in onboarding_claim_bonus_callback: %s", exc)
         await query.answer("❌ Failed to grant bonus. Try again later.", show_alert=True)

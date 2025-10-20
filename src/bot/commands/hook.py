@@ -11,7 +11,7 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, get_active_position, close_position, get_pond_by_id, get_rod_by_id,
     get_suitable_fish, check_rate_limit, check_hook_rate_limit,
-    can_use_guaranteed_hook, should_get_special_catch, mark_onboarding_action
+    should_get_special_catch, mark_onboarding_action, update_user_balance_after_hook
 )
 from src.utils.crypto_price import get_crypto_price, get_price_error_message
 from src.utils.fishing_calculations import (
@@ -213,19 +213,6 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.info(f"User {username} caught special item: {special_catch_item}")
             return
 
-        # Check if user should get guaranteed good catch (onboarding)
-        should_guarantee = await can_use_guaranteed_hook(user_id)
-        if should_guarantee:
-            # Override P&L for guaranteed good catch (2-5% positive)
-            import random
-            original_pnl = pnl_percent
-            pnl_percent = random.uniform(2.0, 5.0)
-            await mark_onboarding_action(user_id, 'first_hook')
-            logger.info(
-                f"Guaranteed good catch for user {user_id}: "
-                f"original_pnl={original_pnl:.4f}% → guaranteed_pnl={pnl_percent:.4f}%"
-            )
-
         # Normal fishing - proceed with fish selection and generation
         # The database-driven fish selection with weighted rarity system
         fish_data = await get_suitable_fish(
@@ -271,6 +258,12 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"pnl_percent={pnl_percent:.4f}%, leverage={leverage}x, time={time_fishing}"
             )
             await close_position(position['id'], current_price, pnl_percent, fish_data['id'])
+
+            # Update user balance based on P&L
+            await update_user_balance_after_hook(user_id, pnl_percent)
+
+            # Mark first hook action in onboarding progress
+            await mark_onboarding_action(user_id, 'first_hook')
 
             # Wait for both animation and card generation to complete
             animation_message = await hook_task
@@ -334,7 +327,7 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             # Emergency fallback - should never happen with expanded fish database
             await hook_task  # Wait for animation to complete
-            await safe_reply(update, f"🎣 {username} caught somTACing strange! P&L: {pnl_percent:+.1f}%")
+            await safe_reply(update, f"🎣 {username} caught something strange! P&L: {pnl_percent:+.1f}%")
             await close_position(position['id'], current_price, pnl_percent, None)
 
         # Handle onboarding progression if applicable

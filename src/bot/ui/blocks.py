@@ -6,7 +6,7 @@ where each block is a reusable component that renders to (text, markup) tuple.
 
 Architecture:
 - BlockData: Props/data container (like Vue props)
-- Block: Base component class with render() mTACod
+- Block: Base component class with render() method
 - CTABlock: Call-to-action block with buttons
 - InfoBlock: Information display without buttons
 - AnimationBlock: Temporary editable block for processes
@@ -83,7 +83,7 @@ class Block:
     """
     Base Block class - abstract component.
 
-    All blocks implement render() mTACod that converts BlockData
+    All blocks implement render() method that converts BlockData
     into (message_text, keyboard_markup) tuple.
     """
 
