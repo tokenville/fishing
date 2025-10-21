@@ -95,26 +95,41 @@ async def connect_user_to_pond(user_id: int, username: str, chat_id: int) -> tup
     )
 
     try:
+        logger.info(f"Attempting to connect user {user_id} ({username}) to pond with chat_id={chat_id}")
+
         # Check if user is already a member
         is_already_member = await is_user_in_group_pond(user_id, chat_id)
+        logger.debug(f"User {user_id} is_already_member: {is_already_member}")
 
         # Get or create user
         user = await get_user(user_id)
         if not user:
+            logger.info(f"Creating new user {user_id}")
             await create_user(user_id, username)
             user = await get_user(user_id)
         else:
+            logger.debug(f"User {user_id} exists, ensuring level and starter rod")
             # Ensure existing user has level and starter rod
             await ensure_user_has_level(user_id)
             await give_starter_rod(user_id)
             user = await get_user(user_id)  # Refresh user data
 
         # Add user to group membership
+        logger.debug(f"Adding user {user_id} to group {chat_id}")
         await add_user_to_group(user_id, chat_id)
 
         # Get group pond
+        logger.debug(f"Looking up group pond for chat_id={chat_id}")
         group_pond = await get_group_pond_by_chat_id(chat_id)
+        logger.info(f"Group pond lookup result for chat_id={chat_id}: {group_pond}")
+
         if not group_pond:
+            logger.warning(
+                f"Group pond not found for chat_id={chat_id}. "
+                f"User {user_id} cannot be connected to this pond. "
+                f"The bot may not have been added to the group properly, "
+                f"or the pond was not created when the bot joined."
+            )
             return (False, "❌ This group doesn't have a pond yet!", None, False)
 
         # Generate welcome message

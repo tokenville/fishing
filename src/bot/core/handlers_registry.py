@@ -15,7 +15,7 @@ def register_all_handlers(application: Application) -> None:
     from src.bot.commands.status import status
     from src.bot.commands.start import start_command, help_command, pnl, skip_onboarding_command
     from src.bot.commands.leaderboard import leaderboard
-    from src.bot.commands.dev import test_card
+    from src.bot.commands.dev import test_card, chatinfo
     from src.bot.commands.payments import (
         handle_pre_checkout_query, handle_successful_payment,
         buy_bait_command, buy_bait_callback, transactions_command
@@ -42,6 +42,7 @@ def register_all_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("hook", hook))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("test_card", test_card))
+    application.add_handler(CommandHandler("chatinfo", chatinfo))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("leaderboard", leaderboard))

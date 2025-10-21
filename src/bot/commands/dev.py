@@ -16,11 +16,39 @@ from src.generators.fish_card_generator import generate_fish_card_from_db
 logger = logging.getLogger(__name__)
 
 
+async def chatinfo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /chatinfo command - shows chat_id for debugging"""
+    try:
+        # Check if it's development mode
+        if update.effective_user.id not in [6919477427, 3281097]:  # Dev user IDs
+            await safe_reply(update, "🎣 This command is only available to developers!")
+            return
+
+        chat = update.effective_chat
+        chat_type = chat.type
+        chat_id = chat.id
+        chat_title = chat.title or "Private Chat"
+
+        info_msg = (
+            f"<b>Chat Info:</b>\n\n"
+            f"<b>Type:</b> {chat_type}\n"
+            f"<b>ID:</b> <code>{chat_id}</code>\n"
+            f"<b>Title:</b> {chat_title}\n\n"
+            f"<i>Use this ID for ONBOARDING_GROUP_CHAT_ID env variable</i>"
+        )
+
+        await safe_reply(update, info_msg)
+
+    except Exception as e:
+        logger.error(f"Error in chatinfo command: {e}")
+        await safe_reply(update, f"🎣 Error: {str(e)}")
+
+
 async def test_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /test_card command - for development only"""
     try:
         # Check if it's development mode (you can add your own check here)
-        if update.effective_user.id not in [6919477427]:  # Replace with your dev user IDs
+        if update.effective_user.id not in [6919477427, 3281097]:  # Replace with your dev user IDs
             await safe_reply(update, "🎣 This command is only available to developers!")
             return
 

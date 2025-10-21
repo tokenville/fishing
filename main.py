@@ -16,6 +16,7 @@ load_dotenv()
 
 from src.database.db_manager import init_database, close_pool, reset_database
 from src.bot.core.handlers_registry import register_all_handlers
+from src.bot.core.bot_config import configure_bot
 from src.webapp.web_server import start_web_server
 
 # Configure logging level from environment
@@ -61,6 +62,12 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
             logger.info(f"WebApp data received from user {user.id}: {data}")
 
+            # Delete the system message "Data from the mini app..." for cleaner UX
+            try:
+                await update.message.delete()
+            except Exception as e:
+                logger.warning(f"Could not delete WebApp data message: {e}")
+
             # Если данные - это команда, выполняем её
             if data.startswith('/'):
                 command = data.strip()
@@ -74,14 +81,26 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 elif command == '/status':
                     await status(update, context)
                 else:
-                    await update.message.reply_text(f"Unknown command: {command}")
+                    await context.bot.send_message(
+                        chat_id=user.id,
+                        text=f"Unknown command: {command}"
+                    )
             else:
-                await update.message.reply_text("Data received from WebApp!")
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="Data received from WebApp!"
+                )
 
     except Exception as e:
         logger.error(f"Error handling WebApp data: {e}")
-        if update.message:
-            await update.message.reply_text("Error processing WebApp data")
+        logger.exception("Full handle_webapp_data error traceback:")
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="Error processing WebApp data"
+            )
+        except Exception:
+            pass
 
 # Bot token from environment
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -122,6 +141,9 @@ async def startup(application):
         logger.warning("🚨 RESET_DATABASE=1 detected - dropping all tables!")
         await reset_database()
     await init_database()
+
+    # Configure bot commands and settings
+    await configure_bot(application)
 
     # Warm up price cache to reduce API calls at startup
     try:

@@ -440,7 +440,7 @@ async def get_user(telegram_id: int) -> Optional[asyncpg.Record]:
         )
 
 async def create_user(telegram_id: int, username: str):
-    """Create new user with 0 BAIT tokens, 0 balance, and 1 Long starter rod"""
+    """Create new user with 0 BAITs, 0 balance, and 1 Long starter rod"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         # Create user with 0 BAIT
@@ -504,7 +504,7 @@ async def use_bait(telegram_id: int) -> bool:
         return result.split()[-1] != '0'
 
 async def add_bait_tokens(telegram_id: int, amount: int) -> bool:
-    """Add BAIT tokens to user's balance"""
+    """Add BAITs to user's balance"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute('''
@@ -625,9 +625,9 @@ async def _insert_default_products(conn: asyncpg.Connection):
     count = await conn.fetchval('SELECT COUNT(*) FROM products')
     if count == 0:
         products_data = [
-            ('BAIT Pack Small', '10 BAIT tokens for fishing', 10, 100, True),
-            ('BAIT Pack Medium', '50 BAIT tokens for fishing', 50, 450, True),
-            ('BAIT Pack Large', '100 BAIT tokens for fishing', 100, 800, True)
+            ('BAIT Pack Small', '10 BAITs for fishing', 10, 100, True),
+            ('BAIT Pack Medium', '50 BAITs for fishing', 50, 450, True),
+            ('BAIT Pack Large', '100 BAITs for fishing', 100, 800, True)
         ]
         
         await conn.executemany('''
@@ -1558,7 +1558,7 @@ async def get_transaction_by_payload(payload: str) -> Optional[asyncpg.Record]:
 
 async def complete_transaction(transaction_id: int, payment_charge_id: str, 
                              telegram_payment_charge_id: str, provider_payment_charge_id: str) -> bool:
-    """Complete transaction and add BAIT tokens to user"""
+    """Complete transaction and add BAITs to user"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -1581,7 +1581,7 @@ async def complete_transaction(transaction_id: int, payment_charge_id: str,
                 WHERE id = $4
             ''', payment_charge_id, telegram_payment_charge_id, provider_payment_charge_id, transaction_id)
             
-            # Add BAIT tokens to user
+            # Add BAITs to user
             bait_to_add = transaction['bait_amount'] * transaction['quantity']
             await conn.execute('''
                 UPDATE users 
@@ -1617,7 +1617,7 @@ async def get_user_transactions(user_id: int, limit: int = 10) -> List[asyncpg.R
         ''', user_id, limit)
 
 async def refund_transaction(transaction_id: int) -> bool:
-    """Refund a completed transaction (subtract BAIT tokens)"""
+    """Refund a completed transaction (subtract BAITs)"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -1629,14 +1629,14 @@ async def refund_transaction(transaction_id: int) -> bool:
             if not transaction:
                 return False
             
-            # Check if user has enough BAIT tokens
+            # Check if user has enough BAITs
             user = await conn.fetchrow('''
                 SELECT bait_tokens FROM users WHERE telegram_id = $1
             ''', transaction['user_id'])
             
             bait_to_subtract = transaction['bait_amount'] * transaction['quantity']
             if user['bait_tokens'] < bait_to_subtract:
-                logger.warning(f"Cannot refund transaction {transaction_id}: user has insufficient BAIT tokens")
+                logger.warning(f"Cannot refund transaction {transaction_id}: user has insufficient BAITs")
                 return False
             
             # Update transaction status
@@ -1646,7 +1646,7 @@ async def refund_transaction(transaction_id: int) -> bool:
                 WHERE id = $1
             ''', transaction_id)
             
-            # Subtract BAIT tokens from user
+            # Subtract BAITs from user
             await conn.execute('''
                 UPDATE users 
                 SET bait_tokens = bait_tokens - $1
@@ -1872,7 +1872,7 @@ async def has_skipped_onboarding_without_rewards(user_id: int) -> bool:
 async def restart_onboarding_for_rewards(user_id: int):
     """Restart onboarding at JOIN_GROUP step to allow claiming rewards
 
-    This allows users who skipped onboarding to go back and get their 10 BAIT tokens.
+    This allows users who skipped onboarding to go back and get their 10 BAITs.
     """
     pool = await get_pool()
     async with pool.acquire() as conn:

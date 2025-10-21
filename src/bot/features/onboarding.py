@@ -153,7 +153,7 @@ class OnboardingHandler:
         )
         keyboard = [
             [InlineKeyboardButton("🚀 Start tutorial, get bonuses", callback_data="ob_start")],
-            [InlineKeyboardButton("⏭️ Skip bonuses)", callback_data="ob_skip")],
+            [InlineKeyboardButton("⏭️ Skip bonuses", callback_data="ob_skip")],
         ]
         return message, keyboard
 
@@ -247,11 +247,11 @@ class OnboardingHandler:
     ) -> Tuple[str, List[List[InlineKeyboardButton]]]:
         message = (
             "🎉 <b>Congrats on your first catch!</b>\n\n"
-            "You've earned +$1000 virtual balance to kickstart your trading journey.\n"
+            "You've earned +$10,000 virtual balance to kickstart your trading journey.\n"
             "Claim it now to boost your leaderboard position!"
         )
         keyboard = [
-            [InlineKeyboardButton("🏆 Claim $1000 reward", callback_data="ob_claim_reward")],
+            [InlineKeyboardButton("🏆 Claim $10,000 reward", callback_data="ob_claim_reward")],
         ]
         return message, keyboard
 
@@ -268,7 +268,7 @@ class OnboardingHandler:
         )
 
         keyboard = [
-            [InlineKeyboardButton("🎣 Catch more", callback_data="ob_send_cast")],
+            [InlineKeyboardButton("🎣 Cast", callback_data="ob_send_cast")],
         ]
         webapp_url = os.environ.get('WEBAPP_URL')
         if webapp_url:
@@ -396,43 +396,39 @@ async def onboarding_claim_bonus_callback(update: Update, context: ContextTypes.
             await query.answer("This reward is not available right now.", show_alert=True)
             return
 
-        # Get primary group chat ID
-        primary_chat_id = getattr(onboarding_handler, 'group_chat_id', None)
-        if not primary_chat_id:
-            logger.warning("No primary_chat_id configured for onboarding")
-            await query.answer("❌ Onboarding group not configured", show_alert=True)
-            return
-
-        # Check if user is actually a member of the group via Telegram API
-        try:
-            member = await context.bot.get_chat_member(primary_chat_id, user_id)
-            if member.status not in ['member', 'administrator', 'creator']:
-                await query.answer(
-                    "❌ Сначала вступите в группу, чтобы получить награду!\n\n"
-                    "После вступления нажмите кнопку снова.",
-                    show_alert=True
-                )
-                return
-        except Exception as e:
-            logger.warning(f"Could not verify group membership for user {user_id}: {e}")
-            await query.answer(
-                "❌ Не удалось проверить членство в группе. Убедитесь, что вы вступили в группу.",
-                show_alert=True
-            )
-            return
-
-        # User is confirmed to be in the group - give reward
+        # Grant BAIT bonus first (always give reward)
         reward_message = await award_group_bonus(user_id)
-
-        # Connect user to pond (this adds to group_memberships correctly)
-        success, _, pond_name, _ = await connect_user_to_pond(
-            user_id,
-            username,
-            primary_chat_id
-        )
 
         # Show reward alert
         await query.answer(reward_message, show_alert=True)
+
+        # Connect user to onboarding group pond if configured
+        if onboarding_handler.group_chat_id:
+            logger.info(
+                f"Attempting to connect user {user_id} to onboarding pond. "
+                f"Onboarding group_chat_id={onboarding_handler.group_chat_id}"
+            )
+            try:
+                success, message, pond_name, is_new_member = await connect_user_to_pond(
+                    user_id, username, onboarding_handler.group_chat_id
+                )
+                if success:
+                    logger.info(f"User {user_id} successfully connected to onboarding pond {pond_name}")
+                else:
+                    logger.warning(
+                        f"Failed to connect user {user_id} to onboarding pond. "
+                        f"group_chat_id={onboarding_handler.group_chat_id}, "
+                        f"error_message={message}"
+                    )
+            except Exception as conn_err:
+                logger.error(
+                    f"Exception while connecting user {user_id} to onboarding pond. "
+                    f"group_chat_id={onboarding_handler.group_chat_id}, "
+                    f"exception={conn_err}",
+                    exc_info=True
+                )
+        else:
+            logger.warning("Onboarding group chat ID not configured (ONBOARDING_GROUP_CHAT_ID env var), skipping pond connection")
 
         # Delete the join group message after alert is shown
         if query.message:
@@ -440,17 +436,6 @@ async def onboarding_claim_bonus_callback(update: Update, context: ContextTypes.
                 await query.message.delete()
             except Exception as del_err:
                 logger.warning(f"Could not delete join group message: {del_err}")
-
-        # Send pond connection confirmation if successful
-        if success and pond_name:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=(
-                    f"🌊 <b>{pond_name}</b> added to your ponds!\n"
-                    "You can now select it when casting."
-                ),
-                parse_mode='HTML'
-            )
 
         # Advance to next step
         await onboarding_handler.advance_step(user_id, onboarding_handler.STEP_CAST)

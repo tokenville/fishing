@@ -246,20 +246,8 @@ function updatePlayerStats() {
 }
 
 function updateCastHookButton() {
-    const castButton = document.getElementById('cast-btn');
-    if (!castButton) return;
-    
-    if (activePosition) {
-        // User has active position - show Hook button
-        castButton.innerHTML = '<span class="menu-label">Hook</span>';
-        castButton.classList.add('hook-mode');
-        castButton.onclick = handleHookAction;
-    } else {
-        // No active position - show Cast button
-        castButton.innerHTML = '<span class="menu-label">Cast</span>';
-        castButton.classList.remove('hook-mode');
-        castButton.onclick = handleCastAction;
-    }
+    // Deprecated - Close button doesn't need updating
+    // Keep function for backward compatibility
 }
 
 function updateBalanceDisplay() {
@@ -324,9 +312,7 @@ function updateFishGrid() {
                 </div>
                 <h3 class="empty-state-title">Collection is Empty</h3>
                 <p class="empty-state-desc">Start fishing to catch your first fish!</p>
-                <button class="empty-state-btn" id="empty-state-cast-btn">
-                    🎯 Cast Rod
-                </button>
+                <p class="empty-state-hint">Use /cast command in chat to start fishing</p>
             </div>
         `;
         return;
@@ -813,28 +799,16 @@ function closeFishModal() {
 
 // === TELEGRAM INTEGRATION ===
 
-// === CAST/HOOK ACTION HANDLERS ===
-function handleCastAction() {
-    // Send /cast command to Telegram chat
-    sendTelegramCommand('/cast');
-}
-
-function handleHookAction() {
-    // Send /hook command to Telegram chat
-    sendTelegramCommand('/hook');
-}
-
-function sendTelegramCommand(command) {
-    if (tg) {
-        // Просто отправляем команду как текст
-        tg.sendData(command);
+function handleCloseAction() {
+    // Simply close the Mini App
+    if (tg && tg.close) {
         tg.close();
     } else {
-        // Fallback for development/testing
+        // Fallback for testing
         if (appConfig.DEBUG) {
-            showMessage(`Would send command: ${command}`, 'info', 2000);
+            showMessage('Closing app...', 'info', 1000);
         } else {
-            alert(`Would send command: ${command}`);
+            window.close();
         }
     }
 }
@@ -919,9 +893,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('collection-btn').addEventListener('click', function() {
         showScreen('collection');
     });
-    
-    // Note: Cast button handler is set dynamically by updateCastHookButton()
-    // Initial setup will be handled by loadActivePosition() in initializeApp()
+
+    // Close button handler
+    const closeButton = document.getElementById('close-btn');
+    if (closeButton) {
+        closeButton.addEventListener('click', handleCloseAction);
+    }
     
     // Кнопки "Назад"
     document.getElementById('collection-back-btn').addEventListener('click', function() {
@@ -960,12 +937,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.id === 'modal-close-btn') {
             closeFishModal();
         }
-        
-        // Кнопка "Забросить удочку" в пустой коллекции
-        if (e.target.id === 'empty-state-cast-btn') {
-            sendTelegramCommand('/cast');
-        }
-        
+
         // BAIT purchase - клик на баланс BAIT
         if (e.target.closest('.stat-display') && 
             (e.target.id === 'player-bait' || e.target.id === 'bottom-player-bait' || 
@@ -1080,7 +1052,7 @@ async function displayProducts() {
             <div class="product-option ${isBestValue ? 'best-value' : ''}" 
                  data-product-id="${product.id}">
                 <div class="product-title">
-                    🪱 ${product.bait_amount} BAIT Tokens
+                    🪱 ${product.bait_amount} BAITs
                 </div>
                 <div class="product-details">
                     ${product.description}
@@ -1158,13 +1130,11 @@ function showInfo(message) {
 // === APP INITIALIZATION ===
 async function initializeApp() {
     try {
-        // Загружаем данные пользователя, активную удочку, позицию и продукты параллельно
+        // Загружаем данные пользователя, активную удочку и продукты параллельно
         // updateCharacterVisual() вызывается автоматически в loadActiveRod()
-        // updateCastHookButton() вызывается автоматически в loadActivePosition()
         await Promise.all([
             loadUserData(),
             loadActiveRod(),
-            loadActivePosition(),
             loadProducts()
         ]);
     } catch (error) {

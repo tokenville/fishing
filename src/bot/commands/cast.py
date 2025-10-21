@@ -246,11 +246,11 @@ async def _start_cast_for_pond(
                 chat_id=user_id,
                 block_type=ErrorBlock,
                 data=BlockData(
-                    header="❌ No BAIT Tokens!",
-                    body="You need BAIT tokens to cast your fishing rod.",
+                    header="❌ No BAITs!",
+                    body="You need BAITns to cast your fishing rod.",
                     buttons=[("🛒 Buy BAIT", "quick_buy")],
                     web_app_buttons=get_miniapp_button(),
-                    footer="Each cast costs 1 🪱 BAIT token"
+                    footer="Each cast costs 1 🪱 BAIT"
                 )
             )
             return

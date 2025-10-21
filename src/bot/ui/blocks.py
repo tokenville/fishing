@@ -120,7 +120,7 @@ class CTABlock(Block):
     Usage:
         data = BlockData(
             header="🎉 Payment Successful!",
-            body="You received 10 BAIT tokens. Ready to fish?",
+            body="You received 10 BAITs. Ready to fish?",
             buttons=[("🎣 Start Fishing", "quick_cast")],
             footer="Each cast costs 1 BAIT token"
         )
@@ -307,7 +307,7 @@ def build_success_block(
     Example:
         data = build_success_block(
             header="🎉 Payment Complete!",
-            body="You received 10 BAIT tokens.",
+            body="You received 10 BAITs.",
             primary_action=("🎣 Start Fishing", "quick_cast"),
             footer="Each cast costs 1 BAIT"
         )
@@ -344,7 +344,7 @@ def build_error_block(
 
     Example:
         data = build_error_block(
-            header="❌ No BAIT Tokens!",
+            header="❌ No BAITs!",
             body="You need BAIT to go fishing.",
             recovery_action=("💰 Buy BAIT", "buy_bait_1_1"),
             alternative_action=("📊 Check Balance", "show_status")

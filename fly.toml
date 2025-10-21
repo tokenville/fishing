@@ -14,6 +14,7 @@ primary_region = "arn"
   BUNNYCDN_HOSTNAME = "se.storage.bunnycdn.com"
   BUNNYCDN_PUBLIC_URL = "https://miniapps.b-cdn.net"
   ONBOARDING_GROUP_INVITE_URL = "https://t.me/hookedbeta"
+  ONBOARDING_GROUP_CHAT_ID = "-1002915587774"
 
 # HTTP service configuration for Mini App
 [http_service]

@@ -609,9 +609,9 @@ class WebAppServer:
             payload = f"bait_{product_id}_{quantity}"
             
             # Create invoice using bot API
-            title = f"BAIT Tokens x{quantity}"
-            description = f"{total_bait} BAIT tokens for fishing"
-            prices = [{"label": "BAIT Tokens", "amount": total_stars}]
+            title = f"BAITs x{quantity}"
+            description = f"{total_bait} BAITs for fishing"
+            prices = [{"label": "BAITs", "amount": total_stars}]
             
             # Send invoice using bot
             message = await self.application.bot.send_invoice(

@@ -432,7 +432,7 @@ class ViewController:
                 block_type=ErrorBlock,
                 data=BlockData(
                     header="🪱 Out of BAIT!",
-                    body="You need BAIT tokens to go fishing. Purchase now with Telegram Stars?",
+                    body="You need BAITs to go fishing. Purchase now with Telegram Stars?",
                     buttons=[
                         ("💰 Buy 10 BAIT", "buy_bait_1_1"),
                         ("📊 Check Balance", "show_status")

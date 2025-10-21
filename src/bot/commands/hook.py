@@ -11,7 +11,8 @@ from telegram.ext import ContextTypes
 from src.database.db_manager import (
     get_user, get_active_position, close_position, get_pond_by_id, get_rod_by_id,
     get_suitable_fish, check_rate_limit, check_hook_rate_limit,
-    should_get_special_catch, mark_onboarding_action, update_user_balance_after_hook
+    should_get_special_catch, mark_onboarding_action, update_user_balance_after_hook,
+    get_onboarding_progress
 )
 from src.utils.crypto_price import get_crypto_price, get_price_error_message
 from src.utils.fishing_calculations import (
@@ -282,8 +283,12 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             view = get_view_controller(context, user_id)
 
-            # Store hook data for sharing (if group pond)
-            if pond and pond.get('pond_type') == 'group' and pond.get('chat_id') and update.effective_chat.type == Chat.PRIVATE:
+            # Check if this is the first catch (part of onboarding with free cast)
+            progress = await get_onboarding_progress(user_id)
+            is_first_catch = progress and not progress.get('first_catch_reward_claimed', True)
+
+            # Store hook data for sharing (if NOT first catch - to prevent BAIT exploit)
+            if pond and pond.get('chat_id') and update.effective_chat.type == Chat.PRIVATE and not is_first_catch:
                 context.user_data['share_hook_data'] = {
                     'fish_name': fish_data['name'],
                     'fish_emoji': fish_data['emoji'],
@@ -307,6 +312,19 @@ async def hook(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         ],
                     web_app_buttons=get_miniapp_button(),
                         footer="Share it with your group to get +1 BAIT token reward."
+                    )
+                )
+            elif is_first_catch:
+                # First catch - no Share button (free cast, no BAIT refund)
+                await view.show_cta_block(
+                    chat_id=user_id,
+                    block_type=CTABlock,
+                    data=BlockData(
+                        header="🎉 First Catch!",
+                        body=f"You caught {fish_data['emoji']} {fish_data['name']}! Great start!",
+                        buttons=[("🎣 Cast Again (🪱 -1 BAIT)", "quick_cast")],
+                        web_app_buttons=get_miniapp_button(),
+                        footer="Share future catches to earn BAIT rewards!"
                     )
                 )
             else:

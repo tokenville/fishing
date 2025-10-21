@@ -210,7 +210,7 @@ async def get_help_text():
             help_text += f"\n  └ ... and {ponds_count - 4} more"
 
         help_text += f"\n• Level system to unlock new locations"
-        help_text += f"\n• New players get {starter_bait_amount} 🪱 BAIT tokens"
+        help_text += f"\n• New players get {starter_bait_amount} 🪱 BAITs"
         help_text += f"\n• Works in group and private chats!"
 
         return help_text

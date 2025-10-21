@@ -164,7 +164,7 @@ def format_no_fishing_status(username, bait_tokens, user_stats=None):
     base_info = (
         f"🎣 <b>Fishing status {safe_username}:</b>\n\n"
         f"📊 Status: <i>Not fishing</i>\n"
-        f"🪱 BAIT tokens: <b>{bait_tokens}</b>\n"
+        f"🪱 BAITs: <b>{bait_tokens}</b>\n"
     )
 
     # Add user statistics if available
@@ -235,7 +235,7 @@ def format_new_user_status(username):
     return (
         f"🎣 <b>Fishing status {safe_username}:</b>\n\n"
         f"🆕 Status: <b>New player</b>\n"
-        f"🪱 BAIT tokens: <b>10</b> (starter bonus)"
+        f"🪱 BAITs: <b>10</b> (starter bonus)"
     )
 
 
@@ -260,7 +260,7 @@ Make leveraged trades and catch fish based on your performance - from trash catc
 • Close trade = discover your catch!
 
 <b>💼 Your Status:</b>
-🪱 BAIT tokens: <b>{bait_tokens}</b>
+🪱 BAITs: <b>{bait_tokens}</b>
 
 <i>Each cast costs 1 BAIT token!</i>"""
 

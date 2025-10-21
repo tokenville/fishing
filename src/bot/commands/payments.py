@@ -106,7 +106,7 @@ async def handle_successful_payment(update: Update, context: ContextTypes.DEFAUL
 🪱 <b>BAIT Received:</b> {bait_received} tokens
 ⭐ <b>Stars Paid:</b> {transaction['stars_amount']}
 
-Your BAIT tokens have been added to your account. Ready to fish!
+Your BAITs have been added to your account. Ready to fish!
 
 <i>Thank you for supporting Hooked Crypto! 🐟</i>"""
 
@@ -169,7 +169,7 @@ async def buy_bait_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         purchase_message = f"""🛒 <b>BAIT Token Store</b>
 
-<b>💰 Current Balance:</b> {user['bait_tokens']} BAIT tokens
+<b>💰 Current Balance:</b> {user['bait_tokens']} BAITs
 
 <b>🪱 Available Packages:</b>
 Choose a BAIT package below to continue fishing adventures!
@@ -221,9 +221,9 @@ async def buy_bait_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         payload = f"bait_{product_id}_{quantity}"
         
         # Create invoice
-        title = f"BAIT Tokens x{quantity}"
-        description = f"{total_bait} BAIT tokens for fishing"
-        prices = [LabeledPrice(label="BAIT Tokens", amount=total_stars)]
+        title = f"BAITs x{quantity}"
+        description = f"{total_bait} BAITs for fishing"
+        prices = [LabeledPrice(label="BAITs", amount=total_stars)]
         
         await context.bot.send_invoice(
             chat_id=user_id,
@@ -241,7 +241,7 @@ async def buy_bait_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"📦 <b>Product:</b> {product['name']}\n"
             f"🪱 <b>BAIT Amount:</b> {total_bait} tokens\n"
             f"⭐ <b>Price:</b> {total_stars} Stars\n\n"
-            f"<i>Complete the payment to receive your BAIT tokens!</i>",
+            f"<i>Complete the payment to receive your BAITs!</i>",
             parse_mode='HTML'
         )
         
@@ -269,7 +269,7 @@ async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYP
             await safe_reply(update, 
                 "📝 <b>Transaction History</b>\n\n"
                 "No transactions found.\n\n"
-                "<i>Use <code>/buy</code> to purchase BAIT tokens!</i>"
+                "<i>Use <code>/buy</code> to purchase BAITs!</i>"
             )
             return
         
@@ -301,7 +301,7 @@ async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_reply(update, "❌ Error loading transaction history.")
 
 async def send_low_bait_purchase_offer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send purchase offer when user has no BAIT tokens"""
+    """Send purchase offer when user has no BAITs"""
     from src.database.db_manager import has_skipped_onboarding_without_rewards
 
     user_id = update.effective_user.id
@@ -322,8 +322,8 @@ async def send_low_bait_purchase_offer(update: Update, context: ContextTypes.DEF
                 chat_id=user_id,
                 block_type=ErrorBlock,
                 data=BlockData(
-                    header="🪱 Out of BAIT Tokens!",
-                    body="You need BAIT tokens to go fishing, but the store is temporarily unavailable.",
+                    header="🪱 Out of BAITs!",
+                    body="You need BAITs to go fishing, but the store is temporarily unavailable.",
                     buttons=[("🎣 Try Fishing", "quick_cast")],
                     footer="Use <code>/buy</code> command to check store availability"
                 )
@@ -346,29 +346,30 @@ async def send_low_bait_purchase_offer(update: Update, context: ContextTypes.DEF
 
         # Update message if user skipped onboarding
         if skipped_without_rewards:
-            no_bait_message = """🎣 <b>Out of BAIT Tokens!</b>
+            no_bait_message = """🎣 <b>Out of BAITs!</b>
 
-You need BAIT tokens to go fishing. Each cast costs 1 BAIT token.
+You need BAITs to go fishing. Each cast costs 1 BAIT token.
 
 🎁 <b>Get 10 FREE BAIT:</b>
 Start the tutorial to join the fishing group and claim your welcome bonus!
 
 🛒 <b>Or Purchase Instantly:</b>
-Get BAIT tokens with Telegram Stars!
+Get BAITs with Telegram Stars!
 
 ⭐ <i>Secure payment through Telegram</i>"""
         else:
-            no_bait_message = """🎣 <b>Out of BAIT Tokens!</b>
+            no_bait_message = """🎣 <b>Out of BAITs!</b>
 
-You need BAIT tokens to go fishing. Each cast costs 1 BAIT token.
+You need BAITs to go fishing. Each cast costs 1 BAIT token.
 
 🛒 <b>Quick Purchase Options:</b>
-Get BAIT tokens instantly with Telegram Stars!
+Get BAITs instantly with Telegram Stars!
 
 ⭐ <i>Secure payment through Telegram</i>"""
 
-        await update.message.reply_text(
-            no_bait_message,
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=no_bait_message,
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
@@ -384,8 +385,8 @@ Get BAIT tokens instantly with Telegram Stars!
             chat_id=user_id,
             block_type=ErrorBlock,
             data=BlockData(
-                header="🪱 Out of BAIT Tokens!",
-                body="You need BAIT tokens to go fishing. There was an error loading the store.",
+                header="🪱 Out of BAITs!",
+                body="You need BAITs to go fishing. There was an error loading the store.",
                 buttons=[("🎣 Try Again", "quick_cast")],
                 footer="Use <code>/buy</code> command to purchase more"
             )

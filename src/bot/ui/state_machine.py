@@ -48,7 +48,7 @@ class UserState(Enum):
     CATCH_COMPLETE = "catch_complete"                  # Fish caught, showing result
 
     # Special states
-    NO_BAIT = "no_bait"                                # Out of BAIT tokens
+    NO_BAIT = "no_bait"                                # Out of BAITs
     POND_SELECTION = "pond_selection"                  # Choosing fishing pond
     BUYING = "buying"                                  # In purchase flow
 
@@ -214,7 +214,7 @@ class StateMachine:
         if active_position:
             return UserState.FISHING
 
-        # Check BAIT tokens
+        # Check BAITs
         user = await get_user(self.user_id)
         if user and user['bait_tokens'] <= 0:
             return UserState.NO_BAIT
@@ -370,7 +370,7 @@ class StateMachine:
             UserState.CASTING: "Casting animation",
             UserState.HOOKING: "Hooking animation",
             UserState.CATCH_COMPLETE: "Fish caught",
-            UserState.NO_BAIT: "Out of BAIT tokens",
+            UserState.NO_BAIT: "Out of BAITs",
             UserState.POND_SELECTION: "Selecting fishing pond",
             UserState.BUYING: "Purchase in progress",
             UserState.ONBOARDING_INTRO: "Tutorial: Introduction",
